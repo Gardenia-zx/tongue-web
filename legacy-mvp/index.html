@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>舌象智能分析</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <main class="app-shell">
+    <header class="app-header">
+      <div class="brand-group">
+        <div class="brand-mark" aria-hidden="true">十</div>
+        <div>
+          <p class="eyebrow">TongueCare Clinical Agent</p>
+          <h1>舌象智能分析</h1>
+        </div>
+      </div>
+      <div class="header-actions">
+        <span class="status-pill" id="serverStatus">待联调</span>
+        <button class="icon-button" id="copyButton" type="button" title="复制报告摘要" aria-label="复制报告摘要">⧉</button>
+      </div>
+    </header>
+
+    <section class="clinical-layout">
+      <aside class="intake-panel">
+        <div class="section-head">
+          <div>
+            <span class="section-kicker">Image Intake</span>
+            <h2>图像采集</h2>
+          </div>
+          <button class="icon-button" id="resetButton" type="button" title="重置表单" aria-label="重置表单">↺</button>
+        </div>
+
+        <div class="field-row">
+          <label>
+            <span class="field-label">用户 ID</span>
+            <input id="userId" class="input" type="number" min="1" value="1">
+          </label>
+          <label>
+            <span class="field-label">会话 ID</span>
+            <input id="threadId" class="input" type="text" placeholder="可选">
+          </label>
+        </div>
+
+        <details class="dev-settings">
+          <summary>接口设置</summary>
+          <label class="endpoint-field" for="apiEndpoint">
+            <span class="field-label">后端接口</span>
+            <input id="apiEndpoint" class="input" type="url" value="http://127.0.0.1:8080/api/tongue/analyze">
+          </label>
+        </details>
+
+        <label class="dropzone" id="dropzone" for="imageInput">
+          <input id="imageInput" type="file" accept="image/png,image/jpeg,image/webp">
+          <img class="capture-asset" src="./assets/capture-guide.svg" alt="">
+          <span class="dropzone-title">选择或拖入舌象图片</span>
+          <span class="dropzone-note">JPG、PNG、WEBP · 自然光 · 无滤镜</span>
+        </label>
+
+        <figure class="preview-box" id="previewBox" hidden>
+          <img id="previewImage" alt="舌象图片预览">
+          <figcaption id="fileInfo"></figcaption>
+        </figure>
+
+        <button class="primary-button" id="analyzeButton" type="button">
+          <span aria-hidden="true">↑</span>
+          开始分析
+        </button>
+
+        <ol class="steps" id="steps">
+          <li data-step="ready" class="active">
+            <span>01</span>
+            <strong>等待图片</strong>
+          </li>
+          <li data-step="uploading">
+            <span>02</span>
+            <strong>提交后端</strong>
+          </li>
+          <li data-step="agent">
+            <span>03</span>
+            <strong>Agent 分析</strong>
+          </li>
+          <li data-step="done">
+            <span>04</span>
+            <strong>生成报告</strong>
+          </li>
+        </ol>
+      </aside>
+
+      <section class="report-panel">
+        <div class="report-topline">
+          <div>
+            <span class="section-kicker">Assessment Report</span>
+            <h2>分析报告</h2>
+          </div>
+          <div class="report-state">
+            <span>当前任务</span>
+            <strong id="analysisStatus">-</strong>
+          </div>
+        </div>
+
+        <div class="empty-state" id="emptyState">
+          <div class="empty-visual" aria-hidden="true">
+            <span></span>
+            <span></span>
+            <span></span>
+          </div>
+          <h3>等待舌象图片</h3>
+          <p>上传后会生成报告摘要、标准特征、知识库依据和原始报告数据。</p>
+        </div>
+
+        <div class="result-content" id="resultContent" hidden>
+          <div class="meta-grid">
+            <div>
+              <span>报告 ID</span>
+              <strong id="reportId">-</strong>
+            </div>
+            <div>
+              <span>任务 ID</span>
+              <strong id="taskId">-</strong>
+            </div>
+            <div>
+              <span>RAG 状态</span>
+              <strong id="ragState">已返回</strong>
+            </div>
+          </div>
+
+          <section class="report-section">
+            <div class="section-title">
+              <h3>报告摘要</h3>
+            </div>
+            <div id="summaryText" class="summary-text"></div>
+          </section>
+
+          <section class="report-section">
+            <div class="section-title">
+              <h3>识别特征</h3>
+            </div>
+            <div class="feature-list" id="featureList"></div>
+          </section>
+
+          <section class="report-section">
+            <div class="section-title">
+              <h3>检索查询</h3>
+            </div>
+            <p class="query-text" id="ragQuery"></p>
+          </section>
+
+          <section class="report-section">
+            <div class="section-title">
+              <h3>知识库依据</h3>
+            </div>
+            <div class="evidence-list" id="evidenceList"></div>
+          </section>
+
+          <details class="json-details">
+            <summary>查看原始报告 JSON</summary>
+            <pre id="rawJson"></pre>
+          </details>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <script src="./app.js"></script>
+</body>
+</html>

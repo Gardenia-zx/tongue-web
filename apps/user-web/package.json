@@ -1,0 +1,16 @@
+{
+  "name": "@tongue/user-web",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 5173",
+    "build": "vue-tsc --noEmit && vite build",
+    "preview": "vite preview --host 127.0.0.1 --port 4173",
+    "typecheck": "vue-tsc --noEmit"
+  },
+  "dependencies": {
+    "@tongue/shared": "file:../../packages/shared"
+  },
+  "devDependencies": {}
+}
