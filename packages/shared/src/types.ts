@@ -30,6 +30,7 @@ export interface AuthLoginResponse {
   user: UserMe;
 }
 
+/** @deprecated Use AgentChatV2Response for new chat flows. */
 export interface AgentChatResponse {
   status: string;
   threadId?: string;
@@ -37,6 +38,59 @@ export interface AgentChatResponse {
   content: string;
   intentResult?: unknown;
   nextAction?: unknown;
+}
+
+export type AgentContextBindingMode = "NONE" | "ACTIVE_REPORT" | "LAST_ANSWER";
+export type AgentMessageStatus = "PENDING" | "COMPLETED" | "FAILED";
+
+export interface AgentContextBinding {
+  mode: AgentContextBindingMode;
+  reportId?: number;
+}
+
+export interface AgentChatV2Request {
+  requestId: string;
+  clientMessageId: string;
+  threadId: string;
+  conversationId?: string;
+  message: {
+    role: "user";
+    contentType: "text";
+    content: string;
+  };
+  contextBinding: AgentContextBinding;
+  clientContext?: Record<string, unknown>;
+}
+
+export interface AgentReportRef {
+  reportId: number;
+  relation: "GENERATED" | "REFERENCED";
+}
+
+export interface AgentAssistantMessage {
+  messageId: string;
+  role: "assistant";
+  contentType: "text" | "structured";
+  content: string;
+  structuredContent?: Record<string, unknown>;
+  reportRef?: AgentReportRef;
+  createdAt?: string;
+}
+
+export interface AgentExecutionSummary {
+  status: string;
+  finishReason?: string;
+}
+
+export interface AgentChatV2Response {
+  status: string;
+  requestId: string;
+  turnId: string;
+  threadId: string;
+  conversationId: string;
+  assistantMessage: AgentAssistantMessage;
+  execution?: AgentExecutionSummary;
+  traceId?: string;
 }
 
 export interface DoctorProfile {
