@@ -68,7 +68,8 @@
                 </div>
                 <el-progress
                   :percentage="progressPercent(message.task)"
-                  :status="message.task.status === 'FAILED' ? 'exception' : undefined"
+                  :status="progressStatus(message.task)"
+                  :indeterminate="isTaskRunning(message.task)"
                 />
                 <span class="stage">{{ message.task.currentStage || message.task.status }}</span>
               </div>
@@ -210,6 +211,7 @@ const chatThreadId = ref(`web_chat_${createId()}`);
 const conversationId = ref(`conversation_${createId()}`);
 const messages = ref<ChatMessage[]>([]);
 const latestReport = ref<LatestReportContext | null>(null);
+const pollingTaskIds = new Set<number>();
 
 const fileSize = computed(() => {
   const size = selectedFile.value?.size || 0;
@@ -358,7 +360,8 @@ function contextBindingFor(content: string): AgentContextBinding {
   const reportId = latestKnownReportId();
   const explicitlyMentionsReport = /(报告|舌象结果|分析结果|识别结果|上一份舌象|刚才的舌象)/.test(compact);
   const detailedReportRequest = /((详细|完整|展开|太简单|不够详细).*?(报告|分析))|((报告|分析).*?(详细|完整|展开|太简单|不够详细))/.test(compact);
-  if ((explicitlyMentionsReport || detailedReportRequest) && reportId) {
+  const dietOrCareRequest = /(饮食|吃什么|怎么吃|每天吃|食谱|忌口|食物|早餐|午餐|晚餐|调理|规划)/.test(compact);
+  if ((explicitlyMentionsReport || detailedReportRequest || dietOrCareRequest) && reportId) {
     return { mode: "ACTIVE_REPORT", reportId };
   }
   if (/^(继续|再详细|详细一点|展开说说|刚才|上面|这个|那这个)/.test(compact)) {
@@ -520,6 +523,8 @@ async function sendImageAnalysis(file: File, userDescription: string, requestId:
       conversationId: conversationId.value,
       userDescription,
     });
+    if (created.threadId) chatThreadId.value = created.threadId;
+    if (created.conversationId) conversationId.value = created.conversationId;
     assistantMessage.content = "分析任务已创建，正在调用模型和知识库。";
     assistantMessage.task = {
       taskId: created.taskId,
@@ -540,31 +545,52 @@ async function sendImageAnalysis(file: File, userDescription: string, requestId:
 }
 
 async function pollAnalysisTask(taskId: number, assistantMessage: ChatMessage) {
-  for (let i = 0; i < 90; i += 1) {
-    await new Promise((resolve) => window.setTimeout(resolve, 1500));
-    const task = await tongueApi.task(taskId);
-    assistantMessage.task = task;
-    if (task.status === "COMPLETED") {
-      const report = await tongueApi.report(task.reportId);
-      rememberLatestReport(report);
-      assistantMessage.reportRef = { reportId: task.reportId, relation: "GENERATED" };
-      assistantMessage.content = report.summary || report.featureSummary || "报告已生成，可以查看完整报告。";
-      assistantMessage.status = "COMPLETED";
-      ElMessage.success("报告已生成");
-      return;
+  if (pollingTaskIds.has(taskId)) return;
+  pollingTaskIds.add(taskId);
+  try {
+    let attempts = 0;
+    while (true) {
+      if (attempts > 0) await new Promise((resolve) => window.setTimeout(resolve, 1500));
+      attempts += 1;
+      const task = await tongueApi.task(taskId);
+      assistantMessage.task = task;
+      if (task.status === "COMPLETED") {
+        const report = await tongueApi.report(task.reportId);
+        rememberLatestReport(report);
+        assistantMessage.reportRef = { reportId: task.reportId, relation: "GENERATED" };
+        assistantMessage.content = report.summary || report.featureSummary || "报告已生成，可以查看完整报告。";
+        assistantMessage.status = "COMPLETED";
+        ElMessage.success("报告已生成");
+        return;
+      }
+      if (["FAILED", "CANCELED"].includes(task.status)) {
+        assistantMessage.status = "FAILED";
+        assistantMessage.content = task.errorMessage || "分析任务未完成，请稍后重试。";
+        return;
+      }
     }
-    if (["FAILED", "CANCELED"].includes(task.status)) {
-      assistantMessage.status = "FAILED";
-      assistantMessage.content = task.errorMessage || "分析任务未完成，请稍后重试。";
-      return;
-    }
+  } finally {
+    pollingTaskIds.delete(taskId);
+    saveChatSession();
   }
-  assistantMessage.status = "FAILED";
-  assistantMessage.content = "任务仍在执行，你可以稍后到历史报告中查看结果。";
 }
 
 function progressPercent(task?: TaskStatus) {
-  return Math.round((task?.progress || 0) * 100);
+  if (!task) return 0;
+  if (task.status === "COMPLETED") return 100;
+  const percent = Math.round((task.progress || 0) * 100);
+  return isTaskRunning(task) ? Math.min(99, Math.max(8, percent)) : percent;
+}
+
+function isTaskRunning(task?: TaskStatus) {
+  return Boolean(task && !["COMPLETED", "FAILED", "CANCELED"].includes(task.status));
+}
+
+function progressStatus(task?: TaskStatus) {
+  if (!task) return undefined;
+  if (task.status === "COMPLETED") return "success";
+  if (["FAILED", "CANCELED"].includes(task.status)) return "exception";
+  return undefined;
 }
 
 function openReport(reportId?: number) {
@@ -579,6 +605,12 @@ async function scrollToBottom() {
 
 onMounted(async () => {
   restoreChatSession();
+  for (const message of messages.value) {
+    if (message.task && isTaskRunning(message.task)) {
+      message.status = "PENDING";
+      void pollAnalysisTask(message.task.taskId, message);
+    }
+  }
   await scrollToBottom();
 });
 

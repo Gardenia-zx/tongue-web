@@ -1,6 +1,5 @@
 import { apiRequest } from "./client";
 import type {
-  AgentChatResponse,
   AdminMetric,
   AnalyzeCreateResponse,
   AuthLoginResponse,
@@ -106,19 +105,6 @@ export const tongueApi = {
   },
   deleteReport(reportId: number) {
     return apiRequest<null>(`/api/tongue/reports/${reportId}`, { method: "DELETE" });
-  },
-};
-
-export const agentApi = {
-  chat(message: string, options: { threadId?: string; conversationId?: string } = {}) {
-    return apiRequest<AgentChatResponse>("/api/agent/chat", {
-      method: "POST",
-      body: {
-        message,
-        thread_id: options.threadId,
-        conversation_id: options.conversationId,
-      },
-    });
   },
 };
 

@@ -30,16 +30,6 @@ export interface AuthLoginResponse {
   user: UserMe;
 }
 
-/** @deprecated Use AgentChatV2Response for new chat flows. */
-export interface AgentChatResponse {
-  status: string;
-  threadId?: string;
-  conversationId?: string;
-  content: string;
-  intentResult?: unknown;
-  nextAction?: unknown;
-}
-
 export type AgentContextBindingMode = "AUTO" | "NONE" | "ACTIVE_REPORT" | "LAST_ANSWER";
 export type AgentMessageStatus = "PENDING" | "COMPLETED" | "FAILED";
 
@@ -106,6 +96,8 @@ export interface DoctorProfile {
 export interface AnalyzeCreateResponse {
   reportId: number;
   taskId: number;
+  conversationId?: string;
+  threadId?: string;
   status: string;
 }
 
