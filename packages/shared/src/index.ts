@@ -5,6 +5,7 @@ export * from "./api/agent-v2";
 export * from "./stores/auth";
 export * from "./utils/format";
 export { default as AppShell } from "./components/AppShell.vue";
+export { default as AssistantResponse } from "./components/AssistantResponse.vue";
 export { default as EmptyState } from "./components/EmptyState.vue";
 export { default as MetricCard } from "./components/MetricCard.vue";
 export { default as ReportSummary } from "./components/ReportSummary.vue";
