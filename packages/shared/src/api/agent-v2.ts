@@ -3,7 +3,12 @@ import type { AgentChatV2Request, AgentChatV2Response } from "../types";
 
 export const agentChatV2Api = {
   chat(request: AgentChatV2Request) {
-    const mode = request.contextBinding.mode === "NONE" ? "AUTO" : request.contextBinding.mode;
+    const compact = request.message.content.replace(/\s+/g, "");
+    const explicitNoReport = /(不要结合报告|不参考报告|不用报告|这是新问题|单独问一下)/.test(compact);
+    const mode = request.contextBinding.mode === "NONE" && !explicitNoReport
+      ? "AUTO"
+      : request.contextBinding.mode;
+
     return apiRequest<AgentChatV2Response>("/api/v2/agent/chat", {
       method: "POST",
       body: {
