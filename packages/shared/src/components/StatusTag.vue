@@ -1,7 +1,7 @@
 <template>
   <span class="status-badge" :class="tone">
     <span class="status-dot" aria-hidden="true" />
-    {{ statusText(status) }}
+    {{ label }}
   </span>
 </template>
 
@@ -12,6 +12,8 @@ import { statusText } from "../utils/format";
 const props = defineProps<{
   status?: string;
 }>();
+
+const label = computed(() => statusText(props.status));
 
 const tone = computed(() => {
   const value = String(props.status || "").toUpperCase();
