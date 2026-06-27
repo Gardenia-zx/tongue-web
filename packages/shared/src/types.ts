@@ -40,7 +40,7 @@ export interface AgentChatResponse {
   nextAction?: unknown;
 }
 
-export type AgentContextBindingMode = "NONE" | "ACTIVE_REPORT" | "LAST_ANSWER";
+export type AgentContextBindingMode = "AUTO" | "NONE" | "ACTIVE_REPORT" | "LAST_ANSWER";
 export type AgentMessageStatus = "PENDING" | "COMPLETED" | "FAILED";
 
 export interface AgentContextBinding {
