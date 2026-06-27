@@ -2,7 +2,7 @@ import { createRouter, createWebHistory } from "vue-router";
 import { useAuthStore } from "@tongue/shared";
 import AnalysisView from "../views/PremiumAnalysisView.vue";
 import DoctorsView from "../views/DoctorsView.vue";
-import LoginView from "../views/LoginView.vue";
+import LoginView from "../views/PremiumLoginView.vue";
 import NotificationsView from "../views/NotificationsView.vue";
 import PrivacyView from "../views/PrivacyView.vue";
 import ProfileView from "../views/ProfileView.vue";
