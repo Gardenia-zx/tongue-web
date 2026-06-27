@@ -8,9 +8,6 @@
       </div>
 
       <el-form class="login-form" label-position="top" @submit.prevent>
-        <el-form-item label="后端地址">
-          <el-input v-model="apiBase" placeholder="http://127.0.0.1:8080" @change="auth.saveApiBase(apiBase)" />
-        </el-form-item>
         <el-form-item label="手机号">
           <el-input v-model="phone" placeholder="请输入手机号" />
         </el-form-item>
@@ -31,12 +28,11 @@
 import { ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
-import { DEFAULT_API_BASE, useAuthStore } from "@tongue/shared";
+import { useAuthStore } from "@tongue/shared";
 
 const auth = useAuthStore();
 const router = useRouter();
 const route = useRoute();
-const apiBase = ref(auth.apiBase);
 const phone = ref("");
 const code = ref("");
 
@@ -46,12 +42,11 @@ async function sendCode() {
     return;
   }
   try {
-    normalizeApiBase();
     await auth.sendSms(phone.value.trim());
     ElMessage.success("验证码已发送");
   } catch (error) {
     console.error("send sms failed", { apiBase: auth.apiBase, error });
-    ElMessage.error(error instanceof Error ? error.message : "验证码发送失败，请检查后端服务和接口地址");
+    ElMessage.error(error instanceof Error ? error.message : "验证码发送失败，请检查后端服务");
   }
 }
 
@@ -61,18 +56,12 @@ async function login() {
     return;
   }
   try {
-    normalizeApiBase();
     await auth.login(phone.value.trim(), code.value.trim());
     await router.replace(String(route.query.redirect || "/analysis"));
   } catch (error) {
     console.error("login failed", { apiBase: auth.apiBase, error });
     ElMessage.error(error instanceof Error ? error.message : "登录失败，请检查验证码或后端服务");
   }
-}
-
-function normalizeApiBase() {
-  apiBase.value = apiBase.value.trim() || DEFAULT_API_BASE;
-  auth.saveApiBase(apiBase.value);
 }
 </script>
 
