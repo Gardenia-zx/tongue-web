@@ -6,7 +6,7 @@ import LoginView from "../views/PremiumLoginView.vue";
 import NotificationsView from "../views/NotificationsView.vue";
 import PrivacyView from "../views/PrivacyView.vue";
 import ProfileView from "../views/ProfileView.vue";
-import ReportDetailView from "../views/ReportDetailView.vue";
+import ReportDetailView from "../views/PremiumReportDetailView.vue";
 import ReportsView from "../views/ReportsView.vue";
 import ReviewsView from "../views/ReviewsView.vue";
 import TrendsView from "../views/TrendsView.vue";
