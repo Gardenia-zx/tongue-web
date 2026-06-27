@@ -1,10 +1,12 @@
 :root {
   --th-bg: #f1f2ed;
   --th-surface: #fbfaf7;
+  --th-surface-elevated: #fffefd;
   --th-surface-soft: #e9ede7;
   --th-border: #d8ddd5;
   --th-border-strong: #b9c2b8;
   --th-text: #1e2822;
+  --th-text-soft: #46534b;
   --th-text-muted: #6d7871;
   --th-primary: #3f6552;
   --th-primary-dark: #29483a;
@@ -13,6 +15,7 @@
   --th-warning: #8b7040;
   --th-danger: #9d514c;
   --th-success: #47745b;
+  --th-radius-sm: 12px;
   --th-radius: 16px;
   --th-radius-lg: 24px;
   --th-shadow: 0 22px 60px rgba(45, 61, 51, 0.1);
