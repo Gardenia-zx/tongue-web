@@ -19,6 +19,48 @@
               <img v-if="message.imageUrl" class="message-image" :src="message.imageUrl" alt="舌象图片" />
               <p>{{ message.content }}</p>
 
+              <div
+                v-if="message.role === 'assistant' && message.structuredContent"
+                class="structured-answer"
+              >
+                <h3 v-if="message.structuredContent.title">
+                  {{ message.structuredContent.title }}
+                </h3>
+                <p
+                  v-if="message.structuredContent.summary && message.structuredContent.summary !== message.content"
+                  class="structured-summary"
+                >
+                  {{ message.structuredContent.summary }}
+                </p>
+
+                <ul v-if="message.structuredContent.highlights?.length" class="structured-highlights">
+                  <li
+                    v-for="(item, index) in message.structuredContent.highlights"
+                    :key="`highlight_${index}`"
+                  >
+                    {{ formatStructuredItem(item) }}
+                  </li>
+                </ul>
+
+                <section
+                  v-for="(section, sectionIndex) in message.structuredContent.sections || []"
+                  :key="`section_${sectionIndex}`"
+                  class="structured-section"
+                >
+                  <h4 v-if="section.title">{{ section.title }}</h4>
+                  <p v-if="section.content">{{ section.content }}</p>
+                  <ul v-if="section.items?.length">
+                    <li v-for="(item, itemIndex) in section.items" :key="`item_${itemIndex}`">
+                      {{ formatStructuredItem(item) }}
+                    </li>
+                  </ul>
+                </section>
+
+                <div v-if="message.structuredContent.disclaimer" class="structured-disclaimer">
+                  {{ message.structuredContent.disclaimer }}
+                </div>
+              </div>
+
               <div v-if="message.task" class="task-card">
                 <div class="task-line">
                   <span>任务 {{ message.task.taskId }}</span>
@@ -55,7 +97,7 @@
         </div>
 
         <div v-if="latestReport" class="report-context-hint">
-          当前可引用报告 #{{ latestReport.reportId }}。只有明确提到“报告”或“刚才的分析”时才会绑定。
+          当前可引用报告 #{{ latestReport.reportId }}。提到“报告”“刚才的分析”或要求展开时会自动绑定。
         </div>
 
         <div class="input-row">
@@ -109,6 +151,21 @@ import {
 
 type ChatRole = "assistant" | "user";
 
+interface StructuredSection {
+  title?: string;
+  content?: string;
+  items?: unknown[];
+}
+
+interface StructuredAnswer {
+  answerType?: string;
+  title?: string;
+  summary?: string;
+  highlights?: unknown[];
+  sections?: StructuredSection[];
+  disclaimer?: string;
+}
+
 interface ChatMessage {
   id: string;
   requestId: string;
@@ -117,7 +174,7 @@ interface ChatMessage {
   role: ChatRole;
   contentType: "text" | "structured";
   content: string;
-  structuredContent?: Record<string, unknown>;
+  structuredContent?: StructuredAnswer;
   status: AgentMessageStatus;
   imageUrl?: string;
   task?: TaskStatus;
@@ -179,6 +236,32 @@ function chatStorageKey() {
   return `${CHAT_SESSION_PREFIX}_${currentUserId()}`;
 }
 
+function sanitizeStructuredContent(value: unknown): StructuredAnswer | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const raw = value as Record<string, unknown>;
+  const sections = Array.isArray(raw.sections)
+    ? raw.sections
+        .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object")
+        .map((item) => ({
+          title: typeof item.title === "string" ? item.title : undefined,
+          content: typeof item.content === "string" ? item.content : undefined,
+          items: Array.isArray(item.items) ? item.items : undefined,
+        }))
+    : undefined;
+  return {
+    answerType: typeof raw.answer_type === "string"
+      ? raw.answer_type
+      : typeof raw.answerType === "string"
+        ? raw.answerType
+        : undefined,
+    title: typeof raw.title === "string" ? raw.title : undefined,
+    summary: typeof raw.summary === "string" ? raw.summary : undefined,
+    highlights: Array.isArray(raw.highlights) ? raw.highlights : undefined,
+    sections,
+    disclaimer: typeof raw.disclaimer === "string" ? raw.disclaimer : undefined,
+  };
+}
+
 function sanitizeMessage(value: unknown): ChatMessage | null {
   if (!value || typeof value !== "object") return null;
   const raw = value as Record<string, unknown>;
@@ -193,7 +276,7 @@ function sanitizeMessage(value: unknown): ChatMessage | null {
     role,
     contentType: raw.contentType === "structured" ? "structured" : "text",
     content: raw.content,
-    structuredContent: raw.structuredContent as Record<string, unknown> | undefined,
+    structuredContent: sanitizeStructuredContent(raw.structuredContent),
     status: raw.status === "PENDING" || raw.status === "FAILED" ? raw.status : "COMPLETED",
     imageUrl: typeof raw.imageUrl === "string" ? raw.imageUrl : undefined,
     task: raw.task as TaskStatus | undefined,
@@ -208,6 +291,18 @@ function sanitizeMessage(value: unknown): ChatMessage | null {
   return message;
 }
 
+function latestReportIdFromMessages() {
+  for (let index = messages.value.length - 1; index >= 0; index -= 1) {
+    const reportId = messages.value[index]?.reportRef?.reportId;
+    if (reportId) return reportId;
+  }
+  return undefined;
+}
+
+function latestKnownReportId() {
+  return latestReport.value?.reportId || latestReportIdFromMessages();
+}
+
 function restoreChatSession() {
   const raw = localStorage.getItem(chatStorageKey());
   if (!raw) return;
@@ -219,6 +314,10 @@ function restoreChatSession() {
       messages.value = parsed.messages.map(sanitizeMessage).filter((item): item is ChatMessage => Boolean(item)).slice(-80);
     }
     latestReport.value = (parsed.latestReport as LatestReportContext | null) || null;
+    if (!latestReport.value) {
+      const reportId = latestReportIdFromMessages();
+      if (reportId) latestReport.value = { reportId };
+    }
     saveChatSession();
   } catch {
     localStorage.removeItem(chatStorageKey());
@@ -252,14 +351,36 @@ function rememberLatestReport(report: ReportDetail) {
 
 function contextBindingFor(content: string): AgentContextBinding {
   const compact = content.replace(/\s+/g, "");
+  if (/(不要结合报告|不参考报告|不用报告|这是新问题|单独问一下)/.test(compact)) {
+    return { mode: "NONE" };
+  }
+
+  const reportId = latestKnownReportId();
   const explicitlyMentionsReport = /(报告|舌象结果|分析结果|识别结果|上一份舌象|刚才的舌象)/.test(compact);
-  if (explicitlyMentionsReport && latestReport.value?.reportId) {
-    return { mode: "ACTIVE_REPORT", reportId: latestReport.value.reportId };
+  const detailedReportRequest = /((详细|完整|展开|太简单|不够详细).*?(报告|分析))|((报告|分析).*?(详细|完整|展开|太简单|不够详细))/.test(compact);
+  if ((explicitlyMentionsReport || detailedReportRequest) && reportId) {
+    return { mode: "ACTIVE_REPORT", reportId };
   }
   if (/^(继续|再详细|详细一点|展开说说|刚才|上面|这个|那这个)/.test(compact)) {
     return { mode: "LAST_ANSWER" };
   }
-  return { mode: "NONE" };
+  return { mode: "AUTO" };
+}
+
+function formatStructuredItem(value: unknown) {
+  if (typeof value === "string" || typeof value === "number") return String(value);
+  if (value && typeof value === "object") {
+    const item = value as Record<string, unknown>;
+    for (const key of ["content", "text", "summary", "label", "title"]) {
+      if (typeof item[key] === "string") return item[key] as string;
+    }
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return String(value);
+    }
+  }
+  return String(value ?? "");
 }
 
 function openFilePicker() {
@@ -359,7 +480,7 @@ async function sendTextChat(content: string, requestId: string, userMessageId: s
     target.id = response.assistantMessage.messageId || target.id;
     target.contentType = response.assistantMessage.contentType;
     target.content = response.assistantMessage.content || "我暂时没有生成有效回复。";
-    target.structuredContent = response.assistantMessage.structuredContent;
+    target.structuredContent = sanitizeStructuredContent(response.assistantMessage.structuredContent);
     target.reportRef = response.assistantMessage.reportRef;
     target.status = response.status === "FAILED" ? "FAILED" : "COMPLETED";
     if (target.reportRef?.reportId) latestReport.value = { reportId: target.reportRef.reportId };
@@ -484,6 +605,15 @@ watch([messages, chatThreadId, conversationId, latestReport], saveChatSession, {
 .message-bubble.failed { border-color: #f5c2c7; background: #fff7f7; }
 .message-bubble p { margin: 0; white-space: pre-wrap; word-break: break-word; line-height: 1.75; font-size: 15px; }
 .message-image { display: block; width: min(280px, 100%); max-height: 280px; object-fit: contain; margin-bottom: 12px; border-radius: 14px; background: #edf2f7; }
+.structured-answer { display: grid; gap: 12px; width: min(620px, 100%); margin-top: 16px; padding: 16px; border: 1px solid #dce7df; border-radius: 14px; background: #f8fbf9; }
+.structured-answer h3 { margin: 0; color: var(--th-primary-dark); font-size: 18px; line-height: 1.45; }
+.structured-summary { color: var(--th-text-muted); }
+.structured-highlights, .structured-section ul { display: grid; gap: 7px; margin: 0; padding-left: 20px; }
+.structured-section { display: grid; gap: 8px; padding-top: 12px; border-top: 1px solid #dfe8e2; }
+.structured-section:first-of-type { padding-top: 0; border-top: 0; }
+.structured-section h4 { margin: 0; color: #254d3f; font-size: 15px; }
+.structured-section p { color: #43564d; }
+.structured-disclaimer { padding: 10px 12px; border-radius: 10px; background: #fff8e8; color: #795c21; font-size: 13px; line-height: 1.65; }
 .task-card { display: grid; gap: 10px; width: min(520px, 100%); margin-top: 12px; padding: 12px; border: 1px solid #dce7ef; border-radius: 12px; background: #fff; }
 .task-line { display: flex; justify-content: space-between; gap: 12px; color: var(--th-text-muted); font-size: 13px; }
 .stage { color: var(--th-text-muted); font-size: 13px; }
