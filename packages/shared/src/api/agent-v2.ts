@@ -3,6 +3,7 @@ import type { AgentChatV2Request, AgentChatV2Response } from "../types";
 
 export const agentChatV2Api = {
   chat(request: AgentChatV2Request) {
+    const mode = request.contextBinding.mode === "NONE" ? "AUTO" : request.contextBinding.mode;
     return apiRequest<AgentChatV2Response>("/api/v2/agent/chat", {
       method: "POST",
       body: {
@@ -16,7 +17,7 @@ export const agentChatV2Api = {
           content: request.message.content,
         },
         context_binding: {
-          mode: request.contextBinding.mode,
+          mode,
           report_id: request.contextBinding.reportId,
         },
         client_context: request.clientContext || {},
