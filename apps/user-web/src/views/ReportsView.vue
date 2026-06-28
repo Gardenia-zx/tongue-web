@@ -80,7 +80,7 @@
           </div>
 
           <div class="report-score">
-            <strong>{{ scoreFor(row.reportId) }}</strong>
+            <strong>{{ qualityScore(row) }}</strong>
             <span>综合参考</span>
           </div>
 
@@ -171,8 +171,8 @@ function formatMonthDay(value?: string) {
   return date ? `${date.getMonth() + 1}月${date.getDate()}日` : "--";
 }
 
-function scoreFor(reportId: number) {
-  return 74 + (Math.abs(Number(reportId) || 0) % 13);
+function qualityScore(row: ReportListItem) {
+  return typeof row.analysisQualityScore === "number" ? Math.round(row.analysisQualityScore) : "--";
 }
 
 onMounted(load);

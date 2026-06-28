@@ -192,7 +192,7 @@
             <div>
               <span class="section-kicker">风险提示</span>
               <h2>一般健康参考，不替代专业诊断</h2>
-              <p>{{ report.riskDisclaimer || "舌象分析结果仅用于日常健康管理参考。如有持续不适或明显症状，请及时咨询专业医生。" }}</p>
+              <p>{{ riskText }}</p>
             </div>
           </section>
         </main>
@@ -265,36 +265,44 @@ const reportDate = computed(() => {
   const value = versions.value[0]?.createdAt;
   return value ? formatDateTime(value) : "最近生成";
 });
-const reportScore = computed(() => 78 + (Math.abs(reportId || 0) % 10));
+const reportScore = computed(() => {
+  const score = report.value?.analysisQualityScore;
+  return typeof score === "number" ? Math.round(score) : "--";
+});
 const attentionCount = computed(() => features.value.filter((item) => (item.confidence || 0) >= 0.75).length);
-const draft = computed<Record<string, unknown>>(() => {
-  const value = report.value?.draftReport;
+const structured = computed<Record<string, unknown>>(() => {
+  const value = report.value?.structuredReport;
   return value && typeof value === "object" ? value as Record<string, unknown> : {};
 });
 const interpretationText = computed(() => pickText(
-  draft.value.interpretation,
-  draft.value.general_interpretation,
-  draft.value.summary,
+  structured.value.healthInterpretation,
+  structured.value.comprehensiveSummary,
   report.value?.summary,
   report.value?.featureSummary,
 ) || "本次报告已完成舌象特征识别。建议结合连续记录和生活状态综合观察，不宜仅凭单次结果下结论。");
 const dietaryAdvice = computed(() => pickList(
-  draft.value.dietary_advice,
-  draft.value.dietaryAdvice,
-  draft.value.diet_advice,
+  structured.value.dietaryAdvice,
+  structured.value.dietary_advice,
   ["保持饮食规律，避免短期内过度生冷或油腻。", "结合自身耐受情况记录饮食与身体感受。"],
 ));
 const exerciseAdvice = computed(() => pickList(
-  draft.value.exercise_advice,
-  draft.value.exerciseAdvice,
+  structured.value.exerciseAdvice,
+  structured.value.exercise_advice,
   ["选择中等强度、可长期坚持的运动。", "运动后关注疲劳、睡眠和恢复情况。"],
 ));
 const lifestyleAdvice = computed(() => pickList(
-  draft.value.lifestyle_advice,
-  draft.value.health_notes,
-  draft.value.health_suggestions,
+  structured.value.lifestyleAdvice,
+  structured.value.lifestyle_advice,
   ["保持规律作息，避免长期熬夜。", "建议在相似光线和时间条件下进行后续复拍。"],
 ));
+const riskText = computed(() => {
+  const tips = pickList(
+    structured.value.riskTips,
+    report.value?.riskDisclaimer,
+    ["舌象分析结果仅用于日常健康管理参考。如有持续不适或明显症状，请及时咨询专业医生。"],
+  );
+  return tips.join(" ");
+});
 
 async function load() {
   loading.value = true;

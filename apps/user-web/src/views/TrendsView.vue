@@ -2,7 +2,7 @@
   <section class="trend-page">
     <header class="trend-head">
       <div>
-        <span class="page-kicker">HEALTH TRENDS</span>
+        <span class="page-kicker">健康趋势</span>
         <h1>趋势分析</h1>
         <p>基于历史报告观察舌象特征的出现频率与记录节奏。</p>
       </div>
@@ -42,7 +42,7 @@
       <section class="chart-panel">
         <div class="panel-heading">
           <div>
-            <span class="page-kicker">FEATURE FREQUENCY</span>
+            <span class="page-kicker">特征变化</span>
             <h2>特征出现频率</h2>
             <p>展示所选周期内各类结构化特征的累计出现次数。</p>
           </div>
@@ -60,12 +60,14 @@
           <span class="leaf leaf-two" />
           <span class="leaf leaf-three" />
         </div>
-        <span class="page-kicker">AI 趋势总结</span>
+        <span class="page-kicker">智能趋势总结</span>
         <h2>{{ summaryTitle }}</h2>
         <p>{{ summaryText }}</p>
         <div class="summary-facts">
           <span><strong>{{ topFeature?.label || "暂无" }}</strong> 高频特征</span>
           <span><strong>{{ timeline.length }}</strong> 条时间记录</span>
+          <span><strong>{{ disappearedCount }}</strong> 消失特征</span>
+          <span><strong>{{ unsupportedCount }}</strong> 暂不支持</span>
         </div>
       </aside>
     </div>
@@ -73,7 +75,7 @@
     <section class="timeline-panel">
       <div class="panel-heading">
         <div>
-          <span class="page-kicker">REPORT TIMELINE</span>
+          <span class="page-kicker">报告时间</span>
           <h2>报告时间轴</h2>
           <p>按时间回顾每一次舌象记录。</p>
         </div>
@@ -94,14 +96,64 @@
       </div>
       <EmptyState v-else title="暂无趋势数据" description="完成多次分析后，这里会形成趋势。" />
     </section>
-  </section>
+
+    <section class="compare-panel">
+      <div class="panel-heading">
+        <div>
+          <span class="page-kicker">报告对比</span>
+          <h2>历史报告对比</h2>
+          <p>选择两份报告，后端计算确定性差异，Agent 负责解释。</p>
+        </div>
+      </div>
+      <div class="compare-controls">
+        <select v-model.number="baseReportId">
+          <option :value="0">选择基准报告</option>
+          <option v-for="item in timeline" :key="`base_${reportIdOf(item)}`" :value="reportIdOf(item)">
+            #{{ reportIdOf(item) }} {{ shortDate(createdAtOf(item)) }}
+          </option>
+        </select>
+        <select v-model.number="targetReportId">
+          <option :value="0">选择对比报告</option>
+          <option v-for="item in timeline" :key="`target_${reportIdOf(item)}`" :value="reportIdOf(item)">
+            #{{ reportIdOf(item) }} {{ shortDate(createdAtOf(item)) }}
+          </option>
+        </select>
+        <button class="refresh-button" type="button" :disabled="compareDisabled" @click="compareReports">
+          <RefreshCw :size="15" />
+          对比
+        </button>
+      </div>
+      <div v-if="compareResult" class="compare-result">
+        <p>{{ compareResult.explanation }}</p>
+        <div class="compare-counts">
+          <span>新增 {{ compareResult.added.length }}</span>
+          <span>消失 {{ compareResult.removed.length }}</span>
+          <span>持续 {{ compareResult.persistent.length }}</span>
+          <span>变化 {{ compareResult.changed.length }}</span>
+          <span>不支持 {{ compareResult.unsupported.length }}</span>
+        </div>
+        <ul>
+          <li v-for="item in compareResult.observationSuggestions" :key="item">{{ item }}</li>
+        </ul>
+      </div>
+    </section>  </section>
 </template>
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
 import * as echarts from "echarts";
 import { CalendarCheck2, FileText, RefreshCw, ScanLine, Sparkles } from "lucide-vue-next";
-import { EmptyState, featureLabel, trendApi, type FeatureTrend, type TimelineItem, type TrendOverview } from "@tongue/shared";
+import {
+  EmptyState,
+  featureLabel,
+  tongueApi,
+  trendApi,
+  type FeatureTrend,
+  type ReportCompareResult,
+  type TimelineItem,
+  type TrendOverview,
+  type TrendSeriesPoint,
+} from "@tongue/shared";
 
 const ranges = [
   { label: "近 30 天", days: 30 },
@@ -111,34 +163,58 @@ const ranges = [
 const activeDays = ref(90);
 const overview = ref<TrendOverview | null>(null);
 const features = ref<FeatureTrend[]>([]);
+const series = ref<TrendSeriesPoint[]>([]);
 const timeline = ref<TimelineItem[]>([]);
+const baseReportId = ref(0);
+const targetReportId = ref(0);
+const compareLoading = ref(false);
+const compareResult = ref<ReportCompareResult | null>(null);
 const chartRef = ref<HTMLDivElement | null>(null);
 let chart: echarts.ECharts | null = null;
 
 const topFeature = computed(() => {
+  if (series.value.length) {
+    const counts = new Map<string, number>();
+    for (const item of series.value) {
+      if (item.status !== "DETECTED") continue;
+      const code = item.featureCode || item.feature_code;
+      counts.set(code, (counts.get(code) || 0) + 1);
+    }
+    const entry = [...counts.entries()].sort((a, b) => b[1] - a[1])[0];
+    return entry ? { label: featureLabel(entry[0]), count: entry[1] } : null;
+  }
   const item = [...features.value].sort((a, b) => b.count - a.count)[0];
-  return item ? { label: featureLabel(item.feature_code), count: item.count } : null;
+  return item ? { label: featureLabel(item.featureCode || item.feature_code), count: item.count } : null;
 });
 const summaryTitle = computed(() => {
-  if (!timeline.value.length) return "从第一次记录开始建立趋势";
+  if (!timeline.value.length) return "从第一份报告开始建立趋势";
   if (timeline.value.length < 3) return "正在积累更稳定的观察样本";
-  return "您的舌象记录正在形成连续趋势";
+  return "你的舌象记录正在形成连续趋势";
 });
 const summaryText = computed(() => {
-  if (!timeline.value.length) return "完成舌象分析后，系统会在这里汇总特征频率、报告时间线与阶段性变化。";
-  if (!topFeature.value) return `当前周期共形成 ${timeline.value.length} 条报告记录，建议保持相似拍摄条件继续观察。`;
-  return `当前周期内“${topFeature.value.label}”出现 ${topFeature.value.count} 次。单一频率不代表疾病结论，建议结合连续报告、生活状态和专业意见综合观察。`;
+  if (!timeline.value.length) return "完成舌象分析后，系统会在这里生成按时间排列的特征变化。";
+  if (!topFeature.value) return `当前周期共有 ${timeline.value.length} 条报告记录，建议保持相似拍摄条件继续观察。`;
+  return `当前周期内“${topFeature.value.label}”出现 ${topFeature.value.count} 次。趋势变化仅用于日常健康观察，不作为诊断结论。`;
 });
+const compareDisabled = computed(() => compareLoading.value || !baseReportId.value || !targetReportId.value || baseReportId.value === targetReportId.value);
+const disappearedCount = computed(() => series.value.filter((item) => item.changeType === "DISAPPEARED" || item.change_type === "DISAPPEARED").length);
+const unsupportedCount = computed(() => series.value.filter((item) => item.status === "UNSUPPORTED").length);
 
 async function load() {
-  const [overviewData, featureData, timelineData] = await Promise.all([
+  const [overviewData, featureData, timelineData, seriesData] = await Promise.all([
     trendApi.overview(activeDays.value),
     trendApi.features(activeDays.value),
     trendApi.timeline(),
+    trendApi.series(activeDays.value),
   ]);
   overview.value = overviewData;
   features.value = featureData;
   timeline.value = timelineData;
+  series.value = seriesData;
+  if (!baseReportId.value && timeline.value.length >= 2) {
+    targetReportId.value = reportIdOf(timeline.value[0]);
+    baseReportId.value = reportIdOf(timeline.value[1]);
+  }
   await nextTick();
   renderChart();
 }
@@ -151,49 +227,45 @@ async function changeRange(days: number) {
 function renderChart() {
   if (!chartRef.value) return;
   chart ||= echarts.init(chartRef.value);
-  const labels = features.value.map((item) => featureLabel(item.feature_code));
-  const values = features.value.map((item) => item.count);
+  const labels = [...new Set(series.value.map((item) => shortDate(item.createdAt || item.created_at)))];
+  const codes = [...new Set(series.value.filter((item) => item.status === "DETECTED").map((item) => item.featureCode || item.feature_code))].slice(0, 5);
+  const chartSeries = codes.map((code) => ({
+    name: featureLabel(code),
+    type: "line",
+    data: labels.map((label) => {
+      const point = series.value.find((item) => shortDate(item.createdAt || item.created_at) === label && (item.featureCode || item.feature_code) === code);
+      return point?.status === "DETECTED" && typeof point.confidence === "number" ? Math.round(point.confidence * 100) : null;
+    }),
+    smooth: 0.35,
+    symbol: "circle",
+    symbolSize: 7,
+  }));
   chart.setOption({
     animationDuration: 700,
-    tooltip: {
-      trigger: "axis",
-      backgroundColor: "rgba(38, 55, 45, 0.94)",
-      borderWidth: 0,
-      textStyle: { color: "#f6f8f5", fontSize: 11 },
-    },
+    tooltip: { trigger: "axis", backgroundColor: "rgba(38, 55, 45, 0.94)", borderWidth: 0, textStyle: { color: "#f6f8f5", fontSize: 11 } },
     grid: { left: 40, right: 22, top: 34, bottom: 52, containLabel: true },
-    xAxis: {
-      type: "category",
-      data: labels,
-      boundaryGap: false,
-      axisLine: { lineStyle: { color: "#d9e2db" } },
-      axisTick: { show: false },
-      axisLabel: { color: "#7b877f", fontSize: 10, interval: 0, rotate: labels.length > 6 ? 22 : 0 },
-    },
-    yAxis: {
-      type: "value",
-      minInterval: 1,
-      splitLine: { lineStyle: { color: "#edf1ed" } },
-      axisLabel: { color: "#8b958e", fontSize: 10 },
-    },
-    series: [
-      {
-        type: "line",
-        data: values,
-        smooth: 0.45,
-        symbol: "circle",
-        symbolSize: 8,
-        lineStyle: { width: 3, color: "#2f7650" },
-        itemStyle: { color: "#2f7650", borderColor: "#eff6f1", borderWidth: 4 },
-        areaStyle: {
-          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-            { offset: 0, color: "rgba(72, 137, 97, 0.26)" },
-            { offset: 1, color: "rgba(72, 137, 97, 0.02)" },
-          ]),
-        },
-      },
-    ],
+    xAxis: { type: "category", data: labels, boundaryGap: false, axisLine: { lineStyle: { color: "#d9e2db" } }, axisTick: { show: false }, axisLabel: { color: "#7b877f", fontSize: 10, interval: 0, rotate: labels.length > 6 ? 22 : 0 } },
+    yAxis: { type: "value", max: 100, splitLine: { lineStyle: { color: "#edf1ed" } }, axisLabel: { color: "#8b958e", fontSize: 10 } },
+    series: chartSeries.length ? chartSeries : [{ type: "line", data: [] }],
   });
+}
+
+function reportIdOf(item: TimelineItem) {
+  return item.reportId || item.report_id;
+}
+
+function createdAtOf(item: TimelineItem) {
+  return item.createdAt || item.created_at;
+}
+
+async function compareReports() {
+  if (compareDisabled.value) return;
+  compareLoading.value = true;
+  try {
+    compareResult.value = await tongueApi.compareReports(baseReportId.value, targetReportId.value);
+  } finally {
+    compareLoading.value = false;
+  }
 }
 
 function shortDate(value?: string) {
@@ -312,14 +384,16 @@ onBeforeUnmount(() => {
 .trend-content-grid { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(270px, 0.5fr); gap: 16px; }
 .chart-panel,
 .ai-summary,
-.timeline-panel {
+.timeline-panel,
+.compare-panel {
   border: 1px solid rgba(183, 194, 184, 0.66);
   border-radius: 22px;
   background: rgba(255, 254, 249, 0.88);
   box-shadow: 0 14px 38px rgba(54, 75, 63, 0.05);
 }
 .chart-panel,
-.timeline-panel { padding: 24px; }
+.timeline-panel,
+.compare-panel { padding: 24px; }
 .panel-heading h2,
 .ai-summary h2 { margin: 8px 0 0; color: #2c3930; font-size: 22px; font-weight: 620; letter-spacing: -0.035em; }
 .refresh-button { display: inline-flex; align-items: center; gap: 7px; min-height: 36px; padding: 0 11px; border: 1px solid rgba(75, 101, 86, 0.15); border-radius: 10px; background: #f8faf7; color: #45614f; cursor: pointer; font-size: 10px; }
@@ -356,6 +430,20 @@ onBeforeUnmount(() => {
 .timeline-item strong { color: #314d3d; font-size: 12px; }
 .timeline-item p { margin: 7px 0; color: #768179; font-size: 10px; line-height: 1.55; }
 .timeline-item small { color: #3d7052; font-size: 9px; }
+
+.compare-controls { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+.compare-controls select {
+  min-height: 38px;
+  min-width: 180px;
+  border: 1px solid rgba(183, 194, 184, 0.66);
+  border-radius: 10px;
+  background: #fffef9;
+  color: #40584a;
+  font-size: 12px;
+}
+.compare-result { display: grid; gap: 12px; margin-top: 18px; color: #667269; font-size: 12px; line-height: 1.75; }
+.compare-counts { display: flex; flex-wrap: wrap; gap: 8px; }
+.compare-counts span { padding: 6px 9px; border-radius: 999px; background: #edf3ee; color: #315d43; font-size: 10px; }
 
 @media (max-width: 980px) {
   .metrics-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }

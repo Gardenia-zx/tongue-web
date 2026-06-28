@@ -40,7 +40,7 @@
         </header>
         <div v-if="latestReport" class="recent-report-content">
           <div class="score-orb">
-            <strong>{{ healthScore }}</strong>
+            <strong>{{ healthScoreText }}</strong>
             <span>/100</span>
           </div>
           <div>
@@ -57,7 +57,7 @@
       <article class="metric-panel">
         <div class="metric-item">
           <span>历史报告</span>
-          <strong>{{ reports.length }}</strong>
+          <strong>{{ reportCount }}</strong>
           <small>份记录</small>
         </div>
         <div class="metric-item warm">
@@ -67,8 +67,8 @@
         </div>
         <div class="metric-item">
           <span>趋势观察</span>
-          <strong>{{ reports.length >= 2 ? "可用" : "积累中" }}</strong>
-          <small>{{ reports.length >= 2 ? "支持历史对比" : "至少需要 2 份报告" }}</small>
+          <strong>{{ trendReady ? "可用" : "积累中" }}</strong>
+          <small>{{ trendMessage }}</small>
         </div>
       </article>
     </div>
@@ -103,12 +103,12 @@
 import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import { ArrowRight, ArrowUpRight, Camera, FileText } from "lucide-vue-next";
-import { tongueApi, useAuthStore, type ReportListItem } from "@tongue/shared";
+import { tongueApi, useAuthStore, type DashboardData, type ReportListItem } from "@tongue/shared";
 import AnalysisV2View from "./AnalysisV2View.vue";
 
 const auth = useAuthStore();
 const router = useRouter();
-const reports = ref<ReportListItem[]>([]);
+const dashboard = ref<DashboardData | null>(null);
 const assistantSectionRef = ref<HTMLElement | null>(null);
 
 const quickQuestions = [
@@ -126,18 +126,20 @@ const greeting = computed(() => {
   if (hour < 18) return "下午好";
   return "晚上好";
 });
-const latestReport = computed(() => reports.value[0] || null);
-const healthScore = computed(() => {
-  if (!latestReport.value) return 0;
-  const seed = Math.abs(Number(latestReport.value.reportId) || 0) % 9;
-  return 78 + seed;
+const latestReport = computed<ReportListItem | null>(() => dashboard.value?.latestReport || null);
+const reportCount = computed(() => dashboard.value?.reportCount || 0);
+const healthScoreText = computed(() => {
+  const score = latestReport.value?.analysisQualityScore;
+  return typeof score === "number" ? Math.round(score) : "--";
 });
+const trendReady = computed(() => dashboard.value?.trendStatus?.status === "READY");
+const trendMessage = computed(() => String(dashboard.value?.trendStatus?.message || "至少需要 2 份报告"));
 
 onMounted(async () => {
   try {
-    reports.value = await tongueApi.reports();
+    dashboard.value = await tongueApi.dashboard();
   } catch (error) {
-    console.error("load dashboard reports failed", error);
+    console.error("load dashboard failed", error);
   }
 });
 

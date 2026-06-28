@@ -17,7 +17,7 @@
           <div class="message-main">
             <div :class="['message-bubble', message.status.toLowerCase()]">
               <img v-if="message.imageUrl" class="message-image" :src="message.imageUrl" alt="舌象图片" />
-              <p>{{ message.content }}</p>
+              <p v-if="!message.structuredContent">{{ message.content }}</p>
 
               <div
                 v-if="message.role === 'assistant' && message.structuredContent"

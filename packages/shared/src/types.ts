@@ -115,8 +115,24 @@ export interface ReportListItem {
   reportId: number;
   status?: string;
   featureSummary?: string;
+  analysisQualityScore?: number;
+  analysisQualityLevel?: string;
+  qualityVersion?: string;
+  analysisQualityVersion?: string;
   createdAt?: string;
   updatedAt?: string;
+}
+
+export interface StructuredReport {
+  schemaVersion?: string;
+  comprehensiveSummary?: string;
+  tongueFeatures?: Array<Record<string, unknown>>;
+  healthInterpretation?: string;
+  dietaryAdvice?: string[];
+  exerciseAdvice?: string[];
+  lifestyleAdvice?: string[];
+  riskTips?: string[];
+  evidenceRefs?: Array<Record<string, unknown>>;
 }
 
 export interface ReportDetail {
@@ -134,6 +150,12 @@ export interface ReportDetail {
   ragEvidence?: unknown;
   draftReport?: unknown;
   riskDisclaimer?: string;
+  structuredReport?: StructuredReport;
+  analysisQualityScore?: number;
+  analysisQualityLevel?: string;
+  qualityMetrics?: Record<string, unknown>;
+  qualityVersion?: string;
+  analysisQualityVersion?: string;
 }
 
 export interface ReportVersion {
@@ -194,13 +216,71 @@ export interface TrendOverview {
 
 export interface FeatureTrend {
   feature_code: string;
+  featureCode?: string;
   count: number;
 }
 
 export interface TimelineItem {
   report_id: number;
+  reportId?: number;
   feature_summary?: string;
+  featureSummary?: string;
   created_at?: string;
+  createdAt?: string;
+}
+
+export interface TrendSeriesPoint {
+  report_id: number;
+  reportId?: number;
+  created_at?: string;
+  createdAt?: string;
+  feature_code: string;
+  featureCode?: string;
+  status: string;
+  confidence?: number;
+  change_type?: string;
+  changeType?: string;
+  supported: boolean;
+}
+
+export interface DashboardTodo {
+  type: string;
+  title: string;
+  content?: string;
+  action?: string;
+  reportId?: number;
+  taskId?: number;
+  reviewId?: number;
+}
+
+export interface DashboardData {
+  user: UserMe;
+  reportCount: number;
+  latestReport?: ReportListItem | null;
+  trendStatus?: Record<string, unknown>;
+  todos: DashboardTodo[];
+  unreadNotificationCount: number;
+  recentNotifications: NotificationItem[];
+}
+
+export interface ReportCompareFeature {
+  featureCode: string;
+  baseConfidence?: number;
+  targetConfidence?: number;
+  changeType?: string;
+}
+
+export interface ReportCompareResult {
+  baseReportId: number;
+  targetReportId: number;
+  added: ReportCompareFeature[];
+  removed: ReportCompareFeature[];
+  persistent: ReportCompareFeature[];
+  changed: ReportCompareFeature[];
+  unsupported: ReportCompareFeature[];
+  explanation?: string;
+  observationSuggestions: string[];
+  agentStatus?: string;
 }
 
 export interface NavItem {

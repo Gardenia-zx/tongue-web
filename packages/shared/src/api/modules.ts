@@ -4,8 +4,10 @@ import type {
   AnalyzeCreateResponse,
   AuthLoginResponse,
   DoctorProfile,
+  DashboardData,
   FeatureTrend,
   NotificationItem,
+  ReportCompareResult,
   ReportDetail,
   ReportEvidence,
   ReportFeature,
@@ -15,6 +17,7 @@ import type {
   SmsSendResponse,
   TaskStatus,
   TimelineItem,
+  TrendSeriesPoint,
   TrendOverview,
   UserMe,
 } from "../types";
@@ -91,8 +94,17 @@ export const tongueApi = {
   reports() {
     return apiRequest<ReportListItem[]>("/api/tongue/reports");
   },
+  dashboard() {
+    return apiRequest<DashboardData>("/api/tongue/dashboard");
+  },
   report(reportId: number) {
     return apiRequest<ReportDetail>(`/api/tongue/reports/${reportId}`);
+  },
+  compareReports(baseReportId: number, targetReportId: number) {
+    return apiRequest<ReportCompareResult>("/api/tongue/reports/compare", {
+      method: "POST",
+      body: { base_report_id: baseReportId, target_report_id: targetReportId },
+    });
   },
   versions(reportId: number) {
     return apiRequest<ReportVersion[]>(`/api/tongue/reports/${reportId}/versions`);
@@ -147,6 +159,9 @@ export const trendApi = {
   },
   timeline() {
     return apiRequest<TimelineItem[]>("/api/tongue/trends/timeline");
+  },
+  series(days = 90) {
+    return apiRequest<TrendSeriesPoint[]>(`/api/tongue/trends/series?days=${days}`);
   },
 };
 
