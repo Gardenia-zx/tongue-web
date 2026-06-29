@@ -1,6 +1,6 @@
 import { defineStore } from "pinia";
 import { authApi } from "../api/modules";
-import { TOKEN_KEY, USER_KEY, clearToken, getApiBase, setApiBase, setToken } from "../api/client";
+import { TOKEN_KEY, USER_KEY, apiRequest, clearToken, getApiBase, setApiBase, setToken } from "../api/client";
 import type { UserMe, UserRole } from "../types";
 
 function readUser(): UserMe | null {
@@ -12,6 +12,10 @@ function readUser(): UserMe | null {
     localStorage.removeItem(USER_KEY);
     return null;
   }
+}
+
+function persistUser(user: UserMe) {
+  localStorage.setItem(USER_KEY, JSON.stringify(user));
 }
 
 export const useAuthStore = defineStore("auth", {
@@ -51,7 +55,7 @@ export const useAuthStore = defineStore("auth", {
         this.token = result.accessToken;
         this.user = result.user;
         setToken(result.accessToken);
-        localStorage.setItem(USER_KEY, JSON.stringify(result.user));
+        persistUser(result.user);
         return result.user;
       } finally {
         this.loading = false;
@@ -67,7 +71,7 @@ export const useAuthStore = defineStore("auth", {
         this.token = result.accessToken;
         this.user = result.user;
         setToken(result.accessToken);
-        localStorage.setItem(USER_KEY, JSON.stringify(result.user));
+        persistUser(result.user);
         return result.user;
       } finally {
         this.loading = false;
@@ -77,13 +81,32 @@ export const useAuthStore = defineStore("auth", {
       if (!this.token) return null;
       const user = await authApi.me();
       this.user = user;
-      localStorage.setItem(USER_KEY, JSON.stringify(user));
+      persistUser(user);
       return user;
     },
-    async updateProfile(payload: Partial<UserMe>) {
+    async updateProfile(payload: Partial<UserMe> & Record<string, unknown>) {
       const user = await authApi.updateProfile(payload);
       this.user = user;
-      localStorage.setItem(USER_KEY, JSON.stringify(user));
+      persistUser(user);
+      return user;
+    },
+    async uploadAvatar(file: File) {
+      const form = new FormData();
+      form.append("avatar", file);
+      const user = await apiRequest<UserMe>("/api/users/me/avatar", {
+        method: "POST",
+        body: form,
+      });
+      this.user = user;
+      persistUser(user);
+      return user;
+    },
+    async removeAvatar() {
+      const user = await apiRequest<UserMe>("/api/users/me/avatar", {
+        method: "DELETE",
+      });
+      this.user = user;
+      persistUser(user);
       return user;
     },
     async logout() {
