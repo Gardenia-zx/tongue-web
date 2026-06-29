@@ -27,7 +27,7 @@ import { Check, Circle, LoaderCircle } from 'lucide-vue-next';
 import type { TaskStatus } from '@tongue/shared';
 
 const props = defineProps<{ phase?: string; task?: TaskStatus }>();
-const stage = computed(() => String(props.phase || props.task?.currentStage || props.task?.status || 'PENDING').toUpperCase());
+const stage = computed(() => String(props.task?.currentStage || props.phase || props.task?.status || 'PENDING').toUpperCase());
 const rank = computed(() => {
   if (stage.value === 'MODEL_ANALYZING' || stage.value === 'RUNNING') return 1;
   if (stage.value === 'RESULT_ANALYZING' || stage.value === 'RAG_RETRIEVING') return 2;
@@ -35,7 +35,7 @@ const rank = computed(() => {
   return 0;
 });
 const label = computed(() => {
-  if (props.phase === 'UPLOADING') return '正在上传并校验舌象图片';
+  if (!props.task && props.phase === 'UPLOADING') return '正在上传并校验舌象图片';
   if (stage.value === 'RESULT_ANALYZING') return '正在分析识别结果和用户描述';
   if (stage.value === 'RAG_RETRIEVING') return '正在检索相关健康知识';
   if (rank.value === 0) return '图片已接收，等待开始分析';
@@ -43,7 +43,7 @@ const label = computed(() => {
   return '正在生成饮食、睡眠和运动建议';
 });
 const percent = computed(() => {
-  if (props.phase === 'UPLOADING') return 5;
+  if (!props.task && props.phase === 'UPLOADING') return 5;
   if (typeof props.task?.progress === 'number') return Math.max(8, Math.min(99, Math.round(props.task.progress * 100)));
   return rank.value === 1 ? 15 : rank.value === 2 ? 55 : rank.value === 3 ? 85 : 8;
 });
