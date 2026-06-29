@@ -9,6 +9,10 @@
 
         <div :class="['bubble', message.status.toLowerCase()]">
           <img v-if="message.imageUrl" :src="message.imageUrl" class="preview" alt="舌象图片" />
+          <div v-else-if="message.imageAttached" class="image-placeholder">
+            <ImagePlus :size="18" />
+            <span>舌象图片已上传</span>
+          </div>
 
           <div v-if="message.thinking" class="thinking">
             <span></span>{{ message.stageText }}
@@ -153,6 +157,7 @@ interface ChatMessage {
   content: string;
   status: AgentMessageStatus;
   imageUrl?: string;
+  imageAttached?: boolean;
   task?: TaskStatus;
   phase?: Phase;
   typing?: boolean;
@@ -183,7 +188,7 @@ interface StateQuestion {
 }
 
 interface StoredChatSession {
-  schemaVersion: 3;
+  schemaVersion: number;
   userId: string;
   threadId: string;
   conversationId: string;
@@ -192,9 +197,11 @@ interface StoredChatSession {
 }
 
 const CHAT_SESSION_PREFIX = 'tongue_user_chat_session';
+const CHAT_SESSION_SCHEMA_VERSION = 4;
 const MAX_STORED_MESSAGES = 80;
 const POLL_INTERVAL_MS = 1500;
 const MAX_POLL_ATTEMPTS = 240;
+const SESSION_SAVE_DELAY_MS = 120;
 
 const router = useRouter();
 const draft = ref('');
@@ -208,6 +215,8 @@ const threadId = ref(`web_${createId()}`);
 const conversationId = ref(`conv_${createId()}`);
 const timers = new Map<string, number>();
 const polls = new Set<number>();
+let sessionSaveTimer: number | undefined;
+
 const stateQuestions: StateQuestion[] = [
   {
     key: 'sleepStatus',
@@ -314,6 +323,7 @@ function typeMessage(messageId: string, text: string, done: () => void) {
   message.thinking = false;
   message.typing = true;
   message.display = '';
+  saveSession();
 
   let index = 0;
   const timer = window.setInterval(() => {
@@ -328,7 +338,7 @@ function typeMessage(messageId: string, text: string, done: () => void) {
     message.typing = false;
     message.display = undefined;
     done();
-    saveSession();
+    saveSession(true);
   }, 28);
   timers.set(messageId, timer);
 }
@@ -389,10 +399,9 @@ function optionSelected(message: ChatMessage, value: string) {
 
 function toggleList<T extends string>(values: T[], value: T, normalValue?: T) {
   if (normalValue && value === normalValue) return [normalValue];
-  const next = values.includes(value)
+  return values.includes(value)
     ? values.filter((item) => item !== value)
     : [...values.filter((item) => item !== normalValue), value];
-  return next;
 }
 
 function selectStateOption(message: ChatMessage, value: string) {
@@ -475,7 +484,7 @@ async function submitStateSnapshot(message: ChatMessage, skipped: boolean) {
     message.stateStep = undefined;
     message.task = task;
     message.phase = phaseOf(task);
-    saveSession();
+    saveSession(true);
     await pollTask(task.taskId, message);
   } catch (error) {
     message.status = 'FAILED';
@@ -485,8 +494,13 @@ async function submitStateSnapshot(message: ChatMessage, skipped: boolean) {
   } finally {
     message.stateSubmitting = false;
     running.value = false;
-    saveSession();
+    saveSession(true);
   }
+}
+
+function persistentImageUrl(imageUrl?: string) {
+  if (!imageUrl || imageUrl.startsWith('blob:')) return undefined;
+  return imageUrl;
 }
 
 function normalizeStoredMessage(value: unknown): ChatMessage | null {
@@ -510,6 +524,7 @@ function normalizeStoredMessage(value: unknown): ChatMessage | null {
     : typeof raw.processPhase === 'string'
       ? raw.processPhase
       : undefined;
+  const rawImageUrl = typeof raw.imageUrl === 'string' ? raw.imageUrl : undefined;
 
   let content = typeof raw.content === 'string' ? raw.content : '';
   let status: AgentMessageStatus = raw.status === 'FAILED'
@@ -525,6 +540,7 @@ function normalizeStoredMessage(value: unknown): ChatMessage | null {
     status = 'FAILED';
     content = '上一次请求在页面切换时中断，请重新发送。';
   }
+
   const taskStatus = String(task?.status || '').toUpperCase();
   const taskStage = String(task?.currentStage || '').toUpperCase();
   const waitingForState = Boolean(
@@ -537,7 +553,8 @@ function normalizeStoredMessage(value: unknown): ChatMessage | null {
     role: raw.role,
     content,
     status,
-    imageUrl: typeof raw.imageUrl === 'string' ? raw.imageUrl : undefined,
+    imageUrl: persistentImageUrl(rawImageUrl),
+    imageAttached: raw.imageAttached === true || Boolean(rawImageUrl),
     task,
     reportId,
     typing: false,
@@ -550,23 +567,42 @@ function normalizeStoredMessage(value: unknown): ChatMessage | null {
   };
 }
 
-function saveSession() {
-  if (messages.value.some((message) => message.typing)) return;
+function removeLegacyPrepare404Messages(items: ChatMessage[]) {
+  const failedRequestIds = new Set(
+    items
+      .filter((message) => (
+        message.role === 'assistant'
+        && message.status === 'FAILED'
+        && message.content.includes('/api/tongue/analyze/prepare')
+        && message.content.includes('HTTP 404')
+      ))
+      .map((message) => message.requestId),
+  );
 
-  const storedMessages = messages.value.slice(-MAX_STORED_MESSAGES).map((message) => ({
+  if (failedRequestIds.size === 0) return items;
+  return items.filter((message) => !failedRequestIds.has(message.requestId));
+}
+
+function buildStoredMessages() {
+  return messages.value.slice(-MAX_STORED_MESSAGES).map((message) => ({
     ...message,
+    imageUrl: persistentImageUrl(message.imageUrl),
+    imageAttached: message.imageAttached || Boolean(message.imageUrl),
     typing: false,
     display: undefined,
     thinking: false,
     stageText: undefined,
     stateSubmitting: false,
   }));
+}
+
+function writeSession() {
   const session: StoredChatSession = {
-    schemaVersion: 3,
+    schemaVersion: CHAT_SESSION_SCHEMA_VERSION,
     userId: currentUserId(),
     threadId: threadId.value,
     conversationId: conversationId.value,
-    messages: storedMessages,
+    messages: buildStoredMessages(),
     updatedAt: Date.now(),
   };
 
@@ -575,6 +611,23 @@ function saveSession() {
   } catch (error) {
     console.warn('save analysis chat session failed', error);
   }
+}
+
+function saveSession(immediate = false) {
+  if (sessionSaveTimer) {
+    window.clearTimeout(sessionSaveTimer);
+    sessionSaveTimer = undefined;
+  }
+
+  if (immediate) {
+    writeSession();
+    return;
+  }
+
+  sessionSaveTimer = window.setTimeout(() => {
+    sessionSaveTimer = undefined;
+    writeSession();
+  }, SESSION_SAVE_DELAY_MS);
 }
 
 function restoreSession() {
@@ -586,10 +639,14 @@ function restoreSession() {
     if (typeof session.threadId === 'string') threadId.value = session.threadId;
     if (typeof session.conversationId === 'string') conversationId.value = session.conversationId;
     if (Array.isArray(session.messages)) {
-      messages.value = session.messages
+      const restoredMessages = session.messages
         .map(normalizeStoredMessage)
-        .filter((message): message is ChatMessage => Boolean(message))
-        .slice(-MAX_STORED_MESSAGES);
+        .filter((message): message is ChatMessage => Boolean(message));
+      messages.value = removeLegacyPrepare404Messages(restoredMessages).slice(-MAX_STORED_MESSAGES);
+    }
+
+    if (Number(session.schemaVersion || 0) < CHAT_SESSION_SCHEMA_VERSION) {
+      saveSession(true);
     }
   } catch (error) {
     console.warn('restore analysis chat session failed', error);
@@ -642,12 +699,14 @@ async function send() {
     content,
     status: 'COMPLETED',
     imageUrl: previewUrl.value || undefined,
+    imageAttached: Boolean(image),
   });
 
   draft.value = '';
   file.value = null;
   previewUrl.value = '';
   if (fileInput.value) fileInput.value.value = '';
+  saveSession(true);
   await scrollToBottom();
 
   if (image) await sendImage(image, content, requestId);
@@ -709,7 +768,7 @@ async function sendText(content: string, requestId: string) {
     target.content = error instanceof Error ? error.message : '发送失败';
   } finally {
     running.value = false;
-    saveSession();
+    saveSession(true);
   }
 }
 
@@ -752,7 +811,7 @@ async function sendImage(image: File, description: string, requestId: string) {
     };
     target.stateForm = defaultStateForm();
     target.stateStep = 0;
-    saveSession();
+    saveSession(true);
   } catch (error) {
     target.phase = undefined;
     target.task = undefined;
@@ -760,7 +819,7 @@ async function sendImage(image: File, description: string, requestId: string) {
     target.content = error instanceof Error ? error.message : '创建分析任务失败';
   } finally {
     running.value = false;
-    saveSession();
+    saveSession(true);
   }
 }
 
@@ -808,7 +867,7 @@ async function pollTask(taskId: number, target: ChatMessage) {
     target.content = '分析等待时间较长，请稍后查看报告中心。';
   } finally {
     polls.delete(taskId);
-    saveSession();
+    saveSession(true);
   }
 }
 
@@ -845,15 +904,19 @@ onBeforeUnmount(() => {
     }
   }
 
-  saveSession();
+  saveSession(true);
+  if (sessionSaveTimer) {
+    window.clearTimeout(sessionSaveTimer);
+    sessionSaveTimer = undefined;
+  }
   for (const timer of timers.values()) window.clearInterval(timer);
   timers.clear();
   if (previewUrl.value) URL.revokeObjectURL(previewUrl.value);
 });
 
-watch([messages, threadId, conversationId], saveSession, { deep: true });
+watch([messages, threadId, conversationId], () => saveSession(), { deep: true });
 </script>
 
 <style scoped>
-.chat{position:relative;min-height:620px;background:#f4f7fb}.list{height:680px;overflow-y:auto;padding:24px 18px 160px}.row{display:grid;grid-template-columns:36px minmax(0,1fr);gap:10px;width:min(900px,100%);margin:0 auto 18px}.row.user{grid-template-columns:minmax(0,1fr) 36px}.row.user .avatar{grid-column:2}.row.user .bubble{grid-column:1;grid-row:1;justify-self:end;background:#e8f3ff}.avatar{display:grid;width:36px;height:36px;place-items:center;border-radius:50%;background:#fff;color:#28684a}.bubble{width:fit-content;max-width:720px;padding:14px 16px;border:1px solid #e1e9f0;border-radius:16px;background:#fff}.bubble.failed{border-color:#f5c2c7;background:#fff7f7}.bubble p{margin:0;white-space:pre-wrap;line-height:1.75}.preview{width:min(280px,100%);max-height:280px;object-fit:contain;margin-bottom:12px;border-radius:12px}.thinking{display:flex;align-items:center;gap:8px;color:#738078}.thinking span{width:8px;height:8px;border-radius:50%;background:#2f704d;animation:pulse 1s infinite}.state-card{width:min(620px,100%);display:grid;gap:12px}.state-kicker{font-size:12px;font-weight:700;color:#2f704d}.state-card strong{font-size:17px;color:#1f3128}.state-card p{margin:0;color:#69786f}.option-grid{display:flex;flex-wrap:wrap;gap:8px}.option-grid button,.state-actions button{border:1px solid #d7e4dc;border-radius:999px;background:#fff;padding:8px 12px;color:#31443a;cursor:pointer}.option-grid button.active{border-color:#2f704d;background:#e8f3ec;color:#22583c;font-weight:700}.state-actions{display:flex;flex-wrap:wrap;gap:8px}.state-summary{display:grid;gap:6px;padding:10px;border-radius:12px;background:#f7faf7;color:#536157}.state-card textarea{width:100%;min-height:82px;border:1px solid #d7e4dc;border-radius:12px;padding:10px;resize:vertical;font:inherit}.cursor{display:inline-block;width:1px;height:1em;margin-left:2px;background:currentColor;animation:blink .8s infinite}.report-btn{margin-top:12px}.composer{position:absolute;right:0;bottom:0;left:0;width:min(900px,calc(100% - 24px));margin:auto;padding:10px;border:1px solid #d4e1ec;border-radius:16px;background:#fff}.input-row{display:grid;grid-template-columns:auto minmax(0,1fr) 44px;gap:8px;align-items:end}.file{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;padding:8px;border-radius:10px;background:#f2f7fb}.image-upload-button{height:42px}@keyframes pulse{50%{opacity:.35}}@keyframes blink{50%{opacity:0}}@media(max-width:760px){.list{height:620px}.row{grid-template-columns:32px minmax(0,1fr)}.row.user{grid-template-columns:minmax(0,1fr) 32px}}
+.chat{position:relative;min-height:620px;background:#f4f7fb}.list{height:680px;overflow-y:auto;padding:24px 18px 160px}.row{display:grid;grid-template-columns:36px minmax(0,1fr);gap:10px;width:min(900px,100%);margin:0 auto 18px}.row.user{grid-template-columns:minmax(0,1fr) 36px}.row.user .avatar{grid-column:2}.row.user .bubble{grid-column:1;grid-row:1;justify-self:end;background:#e8f3ff}.avatar{display:grid;width:36px;height:36px;place-items:center;border-radius:50%;background:#fff;color:#28684a}.bubble{width:fit-content;max-width:720px;padding:14px 16px;border:1px solid #e1e9f0;border-radius:16px;background:#fff}.bubble.failed{border-color:#f5c2c7;background:#fff7f7}.bubble p{margin:0;white-space:pre-wrap;line-height:1.75}.preview{width:min(280px,100%);max-height:280px;object-fit:contain;margin-bottom:12px;border-radius:12px}.image-placeholder{display:inline-flex;align-items:center;gap:8px;margin-bottom:12px;padding:10px 12px;border:1px solid #d8e4dc;border-radius:12px;background:#f4f8f5;color:#476255;font-size:13px}.thinking{display:flex;align-items:center;gap:8px;color:#738078}.thinking span{width:8px;height:8px;border-radius:50%;background:#2f704d;animation:pulse 1s infinite}.state-card{width:min(620px,100%);display:grid;gap:12px}.state-kicker{font-size:12px;font-weight:700;color:#2f704d}.state-card strong{font-size:17px;color:#1f3128}.state-card p{margin:0;color:#69786f}.option-grid{display:flex;flex-wrap:wrap;gap:8px}.option-grid button,.state-actions button{border:1px solid #d7e4dc;border-radius:999px;background:#fff;padding:8px 12px;color:#31443a;cursor:pointer}.option-grid button.active{border-color:#2f704d;background:#e8f3ec;color:#22583c;font-weight:700}.state-actions{display:flex;flex-wrap:wrap;gap:8px}.state-summary{display:grid;gap:6px;padding:10px;border-radius:12px;background:#f7faf7;color:#536157}.state-card textarea{width:100%;min-height:82px;border:1px solid #d7e4dc;border-radius:12px;padding:10px;resize:vertical;font:inherit}.cursor{display:inline-block;width:1px;height:1em;margin-left:2px;background:currentColor;animation:blink .8s infinite}.report-btn{margin-top:12px}.composer{position:absolute;right:0;bottom:0;left:0;width:min(900px,calc(100% - 24px));margin:auto;padding:10px;border:1px solid #d4e1ec;border-radius:16px;background:#fff}.input-row{display:grid;grid-template-columns:auto minmax(0,1fr) 44px;gap:8px;align-items:end}.file{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;padding:8px;border-radius:10px;background:#f2f7fb}.image-upload-button{height:42px}@keyframes pulse{50%{opacity:.35}}@keyframes blink{50%{opacity:0}}@media(max-width:760px){.list{height:620px}.row{grid-template-columns:32px minmax(0,1fr)}.row.user{grid-template-columns:minmax(0,1fr) 32px}}
 </style>
