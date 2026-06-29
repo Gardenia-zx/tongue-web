@@ -5,7 +5,11 @@ import type {
   AuthLoginResponse,
   DoctorProfile,
   DashboardData,
+  CheckinSummary,
+  DailyCheckin,
+  DailyCheckinRequest,
   FeatureTrend,
+  HealthPlan,
   NotificationItem,
   ReportCompareResult,
   ReportDetail,
@@ -174,6 +178,27 @@ export const notificationApi = {
   },
   readAll() {
     return apiRequest<null>("/api/notifications/read-all", { method: "POST" });
+  },
+};
+
+export const healthPlanApi = {
+  current() {
+    return apiRequest<HealthPlan | null>("/api/health-plans/current");
+  },
+  fromReport(reportId: number) {
+    return apiRequest<HealthPlan>(`/api/health-plans/from-report/${reportId}`, { method: "POST" });
+  },
+  close(planId: number) {
+    return apiRequest<HealthPlan>(`/api/health-plans/${planId}/close`, { method: "POST" });
+  },
+  checkins(days = 30) {
+    return apiRequest<DailyCheckin[]>(`/api/checkins?days=${days}`);
+  },
+  checkinToday(body: DailyCheckinRequest) {
+    return apiRequest<DailyCheckin>("/api/checkins/today", { method: "POST", body });
+  },
+  summary(days = 7) {
+    return apiRequest<CheckinSummary>(`/api/checkins/summary?days=${days}`);
   },
 };
 

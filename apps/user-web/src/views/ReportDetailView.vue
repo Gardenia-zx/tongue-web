@@ -12,6 +12,10 @@
         </div>
       </div>
       <div class="head-actions">
+        <button class="secondary-button" type="button" :disabled="planCreating" @click="createHealthPlan">
+          <ClipboardList :size="16" />
+          {{ planCreating ? "生成中" : "生成健康计划" }}
+        </button>
         <button class="secondary-button" type="button" @click="askAssistant">
           <MessageCircleMore :size="16" />
           向 AI 追问
@@ -236,6 +240,7 @@ import {
   Activity,
   ArrowLeft,
   BookOpenText,
+  ClipboardList,
   Dumbbell,
   FileClock,
   MessageCircleMore,
@@ -249,6 +254,7 @@ import {
 import {
   featureLabel,
   formatDateTime,
+  healthPlanApi,
   reviewApi,
   tongueApi,
   type ReportDetail,
@@ -268,6 +274,7 @@ const evidence = ref<ReportEvidence[]>([]);
 const reviewDialog = ref(false);
 const reviewRemark = ref("");
 const reviewSubmitting = ref(false);
+const planCreating = ref(false);
 const activeSection = ref("summary");
 
 const navItems = [
@@ -381,6 +388,19 @@ async function createReview() {
     ElMessage.error(error instanceof Error ? error.message : "提交医生审核失败");
   } finally {
     reviewSubmitting.value = false;
+  }
+}
+
+async function createHealthPlan() {
+  planCreating.value = true;
+  try {
+    await healthPlanApi.fromReport(reportId);
+    ElMessage.success("健康计划已生成");
+    await router.push("/health-plan");
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : "生成健康计划失败");
+  } finally {
+    planCreating.value = false;
   }
 }
 

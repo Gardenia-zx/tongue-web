@@ -73,6 +73,18 @@
       </article>
     </div>
 
+    <section v-if="currentPlan" class="today-plan-card">
+      <div>
+        <span class="card-kicker">今日健康计划</span>
+        <h2>{{ currentPlan.todayCheckin ? "今天已记录" : "今天还有事项待完成" }}</h2>
+        <p>饮食、睡眠和运动建议来自报告 #{{ currentPlan.sourceReportId }}。</p>
+      </div>
+      <div class="today-actions">
+        <span>下次复拍：{{ currentPlan.nextRetakeDate ? formatDate(currentPlan.nextRetakeDate) : "已完成" }}</span>
+        <button class="secondary-action" type="button" @click="router.push('/health-plan')">查看计划</button>
+      </div>
+    </section>
+
     <div class="quick-panel">
       <div>
         <span class="card-kicker">为您推荐的快捷提问</span>
@@ -103,12 +115,13 @@
 import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import { ArrowRight, ArrowUpRight, Camera, FileText } from "lucide-vue-next";
-import { tongueApi, useAuthStore, type DashboardData, type ReportListItem } from "@tongue/shared";
+import { healthPlanApi, tongueApi, useAuthStore, type DashboardData, type HealthPlan, type ReportListItem } from "@tongue/shared";
 import AnalysisV2View from "./AnalysisV2View.vue";
 
 const auth = useAuthStore();
 const router = useRouter();
 const dashboard = ref<DashboardData | null>(null);
+const currentPlan = ref<HealthPlan | null>(null);
 const assistantSectionRef = ref<HTMLElement | null>(null);
 
 const quickQuestions = [
@@ -137,7 +150,12 @@ const trendMessage = computed(() => String(dashboard.value?.trendStatus?.message
 
 onMounted(async () => {
   try {
-    dashboard.value = await tongueApi.dashboard();
+    const [dashboardData, planData] = await Promise.all([
+      tongueApi.dashboard(),
+      healthPlanApi.current(),
+    ]);
+    dashboard.value = dashboardData;
+    currentPlan.value = planData;
   } catch (error) {
     console.error("load dashboard failed", error);
   }
@@ -492,6 +510,50 @@ function focusAssistant(question: string) {
   padding: 22px 24px;
 }
 
+.today-plan-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 22px 24px;
+  border: 1px solid rgba(183, 194, 184, 0.65);
+  border-radius: 22px;
+  background: rgba(255, 254, 249, 0.88);
+  box-shadow: 0 14px 38px rgba(54, 75, 63, 0.05);
+}
+
+.today-plan-card h2 {
+  margin: 8px 0 0;
+  color: #2f3a31;
+  font-size: 22px;
+}
+
+.today-plan-card p {
+  margin: 8px 0 0;
+  color: #6f786f;
+  font-size: 13px;
+}
+
+.today-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: #66756d;
+  font-size: 12px;
+}
+
+.secondary-action {
+  min-height: 38px;
+  padding: 0 14px;
+  border: 1px solid rgba(72, 102, 84, 0.16);
+  border-radius: 11px;
+  background: #f7faf7;
+  color: #35664b;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 650;
+}
+
 .quick-panel p { margin: 8px 0 0; }
 .quick-list { display: flex; flex-wrap: wrap; gap: 9px; }
 .quick-list button {
@@ -576,6 +638,11 @@ function focusAssistant(question: string) {
   .summary-grid,
   .quick-panel {
     grid-template-columns: 1fr;
+  }
+  .today-plan-card,
+  .today-actions {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .tongue-visual { min-height: 300px; }

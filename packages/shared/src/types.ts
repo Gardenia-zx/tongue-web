@@ -221,8 +221,57 @@ export interface NotificationItem {
   title?: string;
   content?: string;
   payloadJson?: unknown;
+  scheduledAt?: string;
   readAt?: string;
   createdAt?: string;
+}
+
+export interface HealthPlan {
+  planId: number;
+  userId?: number;
+  sourceReportId: number;
+  status: string;
+  startDate: string;
+  endDate: string;
+  dietGoal?: ReportPlan;
+  sleepGoal?: ReportPlan;
+  exerciseGoal?: ReportPlan;
+  observationItems?: string[];
+  todayCheckin?: DailyCheckin | null;
+  nextRetakeDate?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface DailyCheckin {
+  checkinId: number;
+  planId: number;
+  checkinDate: string;
+  dietDone?: boolean;
+  sleepDone?: boolean;
+  exerciseDone?: boolean;
+  observation?: unknown;
+  note?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface DailyCheckinRequest {
+  dietDone?: boolean;
+  sleepDone?: boolean;
+  exerciseDone?: boolean;
+  observation?: unknown;
+  note?: string;
+}
+
+export interface CheckinSummary {
+  days: number;
+  checkinCount: number;
+  checkinRate: number;
+  dietRate: number;
+  sleepRate: number;
+  exerciseRate: number;
+  retakeCompleted: boolean;
 }
 
 export interface TrendOverview {

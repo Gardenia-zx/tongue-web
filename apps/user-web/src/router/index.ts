@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from "vue-router";
 import { useAuthStore } from "@tongue/shared";
 import PremiumAnalysisReactiveView from "../views/PremiumAnalysisReactiveView.vue";
 import DoctorsView from "../views/DoctorsView.vue";
+import HealthPlanView from "../views/HealthPlanView.vue";
 import LoginView from "../views/PremiumLoginView.vue";
 import NotificationsView from "../views/NotificationsView.vue";
 import PrivacyView from "../views/PrivacyView.vue";
@@ -17,6 +18,7 @@ const router = createRouter({
     { path: "/", redirect: "/analysis" },
     { path: "/login", component: LoginView, meta: { public: true } },
     { path: "/analysis", component: PremiumAnalysisReactiveView, meta: { title: "舌象分析", subtitle: "上传图片并生成结构化报告" } },
+    { path: "/health-plan", component: HealthPlanView, meta: { title: "健康计划", subtitle: "查看每日行动和打卡反馈" } },
     { path: "/reports", component: ReportsView, meta: { title: "历史报告", subtitle: "查看和管理历次舌象报告" } },
     { path: "/reports/:reportId", component: ReportDetailView, meta: { title: "报告详情", subtitle: "查看摘要、特征和知识库依据" } },
     { path: "/trends", component: TrendsView, meta: { title: "趋势分析", subtitle: "基于历史报告观察特征变化" } },

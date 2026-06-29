@@ -180,6 +180,7 @@ import {
 } from "lucide-vue-next";
 import {
   agentChatV2Api,
+  healthPlanApi,
   tongueApi,
   USER_KEY,
   type AgentContextBinding,
@@ -614,6 +615,11 @@ function contextBindingFor(content: string): AgentContextBinding {
   return { mode: "AUTO" };
 }
 
+function isDailyPlanRequest(content: string) {
+  const compact = content.replace(/\s+/g, "");
+  return /(每天|每日|今日|今天).*(安排|计划|打卡|怎么做|做什么)|健康计划|执行计划|日常计划/.test(compact);
+}
+
 function formatStructuredItem(value: unknown) {
   if (typeof value === "string" || typeof value === "number") return String(value);
   if (value && typeof value === "object") {
@@ -709,6 +715,20 @@ async function sendTextChat(content: string, requestId: string, userMessageId: s
   await scrollToBottom();
 
   try {
+    if (isDailyPlanRequest(content)) {
+      const currentPlan = await healthPlanApi.current();
+      if (currentPlan) {
+        const target = messages.value.find((item) => item.id === placeholderId && item.requestId === requestId);
+        if (!target) return;
+        stopThinking(placeholderId);
+        target.status = "PENDING";
+        typeAssistantMessage(target, "你的每日健康计划已经整理好了，包含饮食、睡眠、运动和今日观察项。可以进入“健康计划”页面完成今日打卡，并查看下一次复拍提醒。", () => {
+          target.status = "COMPLETED";
+        });
+        return;
+      }
+    }
+
     const response = await agentChatV2Api.chat({
       requestId,
       clientMessageId: userMessageId,

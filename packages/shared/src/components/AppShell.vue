@@ -82,6 +82,7 @@ import {
   ChevronRight,
   ClipboardCheck,
   FileText,
+  HeartPulse,
   LockKeyhole,
   LogOut,
   Menu,
@@ -117,6 +118,7 @@ const roleLabel = computed(() => {
 
 const icons: Record<string, Component> = {
   "/analysis": Activity,
+  "/health-plan": HeartPulse,
   "/reports": FileText,
   "/trends": BarChart3,
   "/reviews": ClipboardCheck,

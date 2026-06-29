@@ -16,6 +16,7 @@ import { AppShell, type NavItem } from "@tongue/shared";
 
 const navItems: NavItem[] = [
   { label: "首页", to: "/analysis" },
+  { label: "健康计划", to: "/health-plan" },
   { label: "我的报告", to: "/reports" },
   { label: "趋势分析", to: "/trends" },
   { label: "医生复核", to: "/reviews" },

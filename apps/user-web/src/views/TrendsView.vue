@@ -38,6 +38,21 @@
       </article>
     </section>
 
+    <section class="execution-panel">
+      <div>
+        <span class="page-kicker">执行反馈</span>
+        <h2>近 7 天健康计划执行情况</h2>
+        <p>仅统计用户打卡，不作为诊断或评分。</p>
+      </div>
+      <div class="execution-metrics">
+        <span><strong>{{ percent(checkinSummary?.checkinRate) }}</strong> 打卡率</span>
+        <span><strong>{{ percent(checkinSummary?.dietRate) }}</strong> 饮食</span>
+        <span><strong>{{ percent(checkinSummary?.sleepRate) }}</strong> 睡眠</span>
+        <span><strong>{{ percent(checkinSummary?.exerciseRate) }}</strong> 运动</span>
+        <span><strong>{{ checkinSummary?.retakeCompleted ? "已完成" : "未完成" }}</strong> 复拍</span>
+      </div>
+    </section>
+
     <div class="trend-content-grid">
       <section class="chart-panel">
         <div class="panel-heading">
@@ -146,8 +161,10 @@ import { CalendarCheck2, FileText, RefreshCw, ScanLine, Sparkles } from "lucide-
 import {
   EmptyState,
   featureLabel,
+  healthPlanApi,
   tongueApi,
   trendApi,
+  type CheckinSummary,
   type FeatureTrend,
   type ReportCompareResult,
   type TimelineItem,
@@ -165,6 +182,7 @@ const overview = ref<TrendOverview | null>(null);
 const features = ref<FeatureTrend[]>([]);
 const series = ref<TrendSeriesPoint[]>([]);
 const timeline = ref<TimelineItem[]>([]);
+const checkinSummary = ref<CheckinSummary | null>(null);
 const baseReportId = ref(0);
 const targetReportId = ref(0);
 const compareLoading = ref(false);
@@ -201,16 +219,18 @@ const disappearedCount = computed(() => series.value.filter((item) => item.chang
 const unsupportedCount = computed(() => series.value.filter((item) => item.status === "UNSUPPORTED").length);
 
 async function load() {
-  const [overviewData, featureData, timelineData, seriesData] = await Promise.all([
+  const [overviewData, featureData, timelineData, seriesData, checkinSummaryData] = await Promise.all([
     trendApi.overview(activeDays.value),
     trendApi.features(activeDays.value),
     trendApi.timeline(),
     trendApi.series(activeDays.value),
+    healthPlanApi.summary(7),
   ]);
   overview.value = overviewData;
   features.value = featureData;
   timeline.value = timelineData;
   series.value = seriesData;
+  checkinSummary.value = checkinSummaryData;
   if (!baseReportId.value && timeline.value.length >= 2) {
     targetReportId.value = reportIdOf(timeline.value[0]);
     baseReportId.value = reportIdOf(timeline.value[1]);
@@ -272,6 +292,10 @@ function shortDate(value?: string) {
   if (!value) return "--";
   const date = new Date(value);
   return `${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function percent(value?: number) {
+  return typeof value === "number" ? `${Math.round(value * 100)}%` : "--";
 }
 
 function resizeChart() {
@@ -382,6 +406,7 @@ onBeforeUnmount(() => {
 .metrics-row p { margin: 4px 0 0; color: #959d97; font-size: 9px; }
 
 .trend-content-grid { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(270px, 0.5fr); gap: 16px; }
+.execution-panel,
 .chart-panel,
 .ai-summary,
 .timeline-panel,
@@ -391,9 +416,15 @@ onBeforeUnmount(() => {
   background: rgba(255, 254, 249, 0.88);
   box-shadow: 0 14px 38px rgba(54, 75, 63, 0.05);
 }
+.execution-panel,
 .chart-panel,
 .timeline-panel,
 .compare-panel { padding: 24px; }
+.execution-panel { display: flex; align-items: center; justify-content: space-between; gap: 18px; }
+.execution-panel h2 { margin: 8px 0 0; color: #2c3930; font-size: 22px; font-weight: 620; letter-spacing: -0.035em; }
+.execution-metrics { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.execution-metrics span { display: grid; min-width: 86px; gap: 4px; padding: 10px 12px; border-radius: 13px; background: #edf3ee; color: #68756d; font-size: 10px; }
+.execution-metrics strong { color: #315d43; font-size: 16px; }
 .panel-heading h2,
 .ai-summary h2 { margin: 8px 0 0; color: #2c3930; font-size: 22px; font-weight: 620; letter-spacing: -0.035em; }
 .refresh-button { display: inline-flex; align-items: center; gap: 7px; min-height: 36px; padding: 0 11px; border: 1px solid rgba(75, 101, 86, 0.15); border-radius: 10px; background: #f8faf7; color: #45614f; cursor: pointer; font-size: 10px; }
@@ -448,6 +479,7 @@ onBeforeUnmount(() => {
 @media (max-width: 980px) {
   .metrics-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .trend-content-grid { grid-template-columns: 1fr; }
+  .execution-panel { align-items: flex-start; flex-direction: column; }
 }
 
 @media (max-width: 700px) {
