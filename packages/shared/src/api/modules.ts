@@ -24,6 +24,7 @@ import type {
   TrendSeriesPoint,
   TrendOverview,
   UserMe,
+  UserStateSnapshot,
 } from "../types";
 
 export const authApi = {
@@ -88,6 +89,38 @@ export const tongueApi = {
     if (options.clientTraceId) form.append("clientTraceId", options.clientTraceId);
     if (options.userDescription?.trim()) form.append("userDescription", options.userDescription.trim());
     return apiRequest<AnalyzeCreateResponse>("/api/tongue/analyze", { method: "POST", body: form });
+  },
+  prepareAnalyze(
+    file: File,
+    options: {
+      conversationId?: string;
+      threadId?: string;
+      clientTraceId?: string;
+      userDescription?: string;
+    } = {},
+  ) {
+    const form = new FormData();
+    form.append("image", file);
+    if (options.conversationId) form.append("conversationId", options.conversationId);
+    if (options.threadId) form.append("threadId", options.threadId);
+    if (options.clientTraceId) form.append("clientTraceId", options.clientTraceId);
+    if (options.userDescription?.trim()) form.append("userDescription", options.userDescription.trim());
+    return apiRequest<AnalyzeCreateResponse>("/api/tongue/analyze/prepare", { method: "POST", body: form });
+  },
+  submitStateSnapshot(taskId: number, body: UserStateSnapshot) {
+    return apiRequest<TaskStatus>(`/api/tongue/tasks/${taskId}/state-snapshot`, {
+      method: "POST",
+      body: {
+        observation_window: body.observationWindow,
+        sleep_status: body.sleepStatus,
+        digestion_status: body.digestionStatus,
+        bowel_status: body.bowelStatus,
+        current_states: body.currentStates,
+        health_goals: body.healthGoals,
+        free_description: body.freeDescription,
+        skipped: body.skipped,
+      },
+    });
   },
   task(taskId: number) {
     return apiRequest<TaskStatus>(`/api/tongue/tasks/${taskId}`);

@@ -111,6 +111,29 @@ export interface TaskStatus {
   errorMessage?: string;
 }
 
+export type SleepStatus = "NORMAL" | "SHORT" | "DIFFICULT_OR_WAKE" | "IRREGULAR_LATE";
+export type DigestionStatus = "NORMAL" | "POOR_APPETITE" | "BLOATING" | "GREASY_REFLUX_DISCOMFORT";
+export type BowelStatus = "NORMAL" | "DRY_CONSTIPATION" | "LOOSE_DIARRHEA" | "STICKY_INCOMPLETE";
+export type CurrentState = "NORMAL" | "FATIGUE" | "STRESS_ANXIETY" | "COLD_SENSITIVE" | "HEAT_DRY_MOUTH";
+export type HealthGoal = "DIET_DIGESTION" | "SLEEP_ROUTINE" | "FITNESS" | "FATIGUE_ENERGY" | "WEIGHT_MANAGEMENT" | "UNDERSTAND_TONGUE";
+
+export interface UserStateSnapshot {
+  snapshotId?: number;
+  userId?: number;
+  reportId?: number;
+  taskId?: number;
+  observationWindow?: "LAST_3_DAYS";
+  sleepStatus?: SleepStatus;
+  digestionStatus?: DigestionStatus;
+  bowelStatus?: BowelStatus;
+  currentStates?: CurrentState[];
+  healthGoals?: HealthGoal[];
+  freeDescription?: string;
+  skipped?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface ReportListItem {
   reportId: number;
   status?: string;
@@ -169,6 +192,7 @@ export interface ReportDetail {
   draftReport?: unknown;
   riskDisclaimer?: string;
   structuredReport?: StructuredReport;
+  stateSnapshot?: UserStateSnapshot;
   analysisQualityScore?: number;
   analysisQualityLevel?: string;
   qualityMetrics?: Record<string, unknown>;
@@ -239,6 +263,7 @@ export interface HealthPlan {
   observationItems?: string[];
   todayCheckin?: DailyCheckin | null;
   nextRetakeDate?: string;
+  personalizationSignals?: string[];
   createdAt?: string;
   updatedAt?: string;
 }

@@ -14,7 +14,7 @@
       <div class="head-actions">
         <button class="secondary-button" type="button" :disabled="planCreating" @click="createHealthPlan">
           <ClipboardList :size="16" />
-          {{ planCreating ? "生成中" : "生成健康计划" }}
+          {{ planCreating ? "生成中" : "生成我的7天健康计划" }}
         </button>
         <button class="secondary-button" type="button" @click="askAssistant">
           <MessageCircleMore :size="16" />

@@ -29,6 +29,7 @@ import type { TaskStatus } from '@tongue/shared';
 const props = defineProps<{ phase?: string; task?: TaskStatus }>();
 const stage = computed(() => String(props.task?.currentStage || props.phase || props.task?.status || 'PENDING').toUpperCase());
 const rank = computed(() => {
+  if (stage.value === 'STATE_COLLECTING' || stage.value === 'WAITING_STATE') return 0;
   if (stage.value === 'MODEL_ANALYZING' || stage.value === 'RUNNING') return 1;
   if (stage.value === 'RESULT_ANALYZING' || stage.value === 'RAG_RETRIEVING') return 2;
   if (stage.value === 'REPORT_GENERATING' || stage.value === 'REPORT_READY' || stage.value === 'COMPLETED') return 3;
@@ -36,6 +37,7 @@ const rank = computed(() => {
 });
 const label = computed(() => {
   if (!props.task && props.phase === 'UPLOADING') return '正在上传并校验舌象图片';
+  if (stage.value === 'STATE_COLLECTING' || stage.value === 'WAITING_STATE') return '请补充近 3 天状态';
   if (stage.value === 'RESULT_ANALYZING') return '正在分析识别结果和用户描述';
   if (stage.value === 'RAG_RETRIEVING') return '正在检索相关健康知识';
   if (rank.value === 0) return '图片已接收，等待开始分析';
