@@ -27,27 +27,30 @@ import { Check, Circle, LoaderCircle } from 'lucide-vue-next';
 import type { TaskStatus } from '@tongue/shared';
 
 const props = defineProps<{ phase?: string; task?: TaskStatus }>();
-const stage = computed(() => String(props.phase || props.task?.currentStage || props.task?.status || 'PENDING').toUpperCase());
+const stage = computed(() => String(props.task?.currentStage || props.phase || props.task?.status || 'PENDING').toUpperCase());
 const rank = computed(() => {
   if (stage.value === 'MODEL_ANALYZING' || stage.value === 'RUNNING') return 1;
+  if (stage.value === 'RESULT_ANALYZING' || stage.value === 'RAG_RETRIEVING') return 2;
   if (stage.value === 'REPORT_GENERATING' || stage.value === 'REPORT_READY' || stage.value === 'COMPLETED') return 3;
   return 0;
 });
 const label = computed(() => {
-  if (props.phase === 'UPLOADING') return '正在上传并校验舌象图片';
+  if (!props.task && props.phase === 'UPLOADING') return '正在上传并校验舌象图片';
+  if (stage.value === 'RESULT_ANALYZING') return '正在分析识别结果和用户描述';
+  if (stage.value === 'RAG_RETRIEVING') return '正在检索相关健康知识';
   if (rank.value === 0) return '图片已接收，等待开始分析';
   if (rank.value === 1) return '舌象模型正在识别图像特征';
-  return '正在分析结果并生成健康管理建议';
+  return '正在生成饮食、睡眠和运动建议';
 });
 const percent = computed(() => {
-  if (props.phase === 'UPLOADING') return 5;
+  if (!props.task && props.phase === 'UPLOADING') return 5;
   if (typeof props.task?.progress === 'number') return Math.max(8, Math.min(99, Math.round(props.task.progress * 100)));
-  return rank.value === 1 ? 15 : rank.value === 3 ? 85 : 8;
+  return rank.value === 1 ? 15 : rank.value === 2 ? 55 : rank.value === 3 ? 85 : 8;
 });
 const steps = computed(() => [
   { key: 'upload', title: '图片上传与校验', description: '检查图片和任务上下文' },
   { key: 'model', title: '舌象模型分析', description: '识别舌质、舌苔与局部特征' },
-  { key: 'result', title: '结果分析', description: '结合识别结果与用户描述' },
+  { key: 'result', title: '结果分析', description: '结合识别结果、用户描述与知识信息' },
   { key: 'report', title: '建议生成', description: '整理饮食、睡眠和运动建议' },
 ].map((item, index) => ({ ...item, state: index < rank.value ? 'done' : index === rank.value ? 'active' : 'waiting' })));
 </script>
