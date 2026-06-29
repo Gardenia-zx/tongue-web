@@ -116,6 +116,12 @@
               <Sparkles :size="21" />
               <p>{{ interpretationText }}</p>
             </div>
+            <div v-if="conditionalAnalysis.length" class="schema2-list">
+              <article>
+                <h3>条件性分析</h3>
+                <ul><li v-for="item in conditionalAnalysis" :key="item">{{ item }}</li></ul>
+              </article>
+            </div>
           </section>
 
           <section id="advice" class="content-section">
@@ -129,17 +135,30 @@
               <article>
                 <span class="advice-icon food"><Utensils :size="18" /></span>
                 <h3>饮食建议</h3>
+                <p v-if="dietPlanGoal" class="plan-goal">{{ dietPlanGoal }}</p>
                 <ul><li v-for="item in dietaryAdvice" :key="item">{{ item }}</li></ul>
               </article>
               <article>
                 <span class="advice-icon move"><Dumbbell :size="18" /></span>
                 <h3>运动建议</h3>
+                <p v-if="exercisePlanGoal" class="plan-goal">{{ exercisePlanGoal }}</p>
                 <ul><li v-for="item in exerciseAdvice" :key="item">{{ item }}</li></ul>
               </article>
               <article>
                 <span class="advice-icon rest"><MoonStar :size="18" /></span>
                 <h3>生活方式</h3>
+                <p v-if="sleepPlanGoal" class="plan-goal">{{ sleepPlanGoal }}</p>
                 <ul><li v-for="item in lifestyleAdvice" :key="item">{{ item }}</li></ul>
+              </article>
+            </div>
+            <div v-if="threeDayObservation.length || followupQuestions.length" class="schema2-list">
+              <article v-if="threeDayObservation.length">
+                <h3>未来三天观察</h3>
+                <ul><li v-for="item in threeDayObservation" :key="item">{{ item }}</li></ul>
+              </article>
+              <article v-if="followupQuestions.length">
+                <h3>后续追问</h3>
+                <ul><li v-for="item in followupQuestions" :key="item">{{ item }}</li></ul>
               </article>
             </div>
           </section>
@@ -275,25 +294,52 @@ const structured = computed<Record<string, unknown>>(() => {
   return value && typeof value === "object" ? value as Record<string, unknown> : {};
 });
 const interpretationText = computed(() => pickText(
+  structured.value.tongueFeatureExplanation,
+  structured.value.tongue_feature_explanation,
   structured.value.healthInterpretation,
   structured.value.comprehensiveSummary,
   report.value?.summary,
   report.value?.featureSummary,
 ) || "本次报告已完成舌象特征识别。建议结合连续记录和生活状态综合观察，不宜仅凭单次结果下结论。");
+const dietPlan = computed(() => pickObject(structured.value.dietPlan, structured.value.diet_plan));
+const sleepPlan = computed(() => pickObject(structured.value.sleepPlan, structured.value.sleep_plan));
+const exercisePlan = computed(() => pickObject(structured.value.exercisePlan, structured.value.exercise_plan));
+const dietPlanGoal = computed(() => pickText(dietPlan.value.goal));
+const sleepPlanGoal = computed(() => pickText(sleepPlan.value.goal));
+const exercisePlanGoal = computed(() => pickText(exercisePlan.value.goal));
 const dietaryAdvice = computed(() => pickList(
+  dietPlan.value.actions,
   structured.value.dietaryAdvice,
   structured.value.dietary_advice,
   ["保持饮食规律，避免短期内过度生冷或油腻。", "结合自身耐受情况记录饮食与身体感受。"],
 ));
 const exerciseAdvice = computed(() => pickList(
+  exercisePlan.value.actions,
   structured.value.exerciseAdvice,
   structured.value.exercise_advice,
   ["选择中等强度、可长期坚持的运动。", "运动后关注疲劳、睡眠和恢复情况。"],
 ));
 const lifestyleAdvice = computed(() => pickList(
+  sleepPlan.value.actions,
   structured.value.lifestyleAdvice,
   structured.value.lifestyle_advice,
   ["保持规律作息，避免长期熬夜。", "建议在相似光线和时间条件下进行后续复拍。"],
+));
+const conditionalAnalysis = computed(() => pickRecordList(
+  structured.value.conditionalAnalysis,
+  structured.value.conditional_analysis,
+).map((item) => {
+  const condition = pickText(item.condition);
+  const interpretation = pickText(item.interpretation);
+  return condition && interpretation ? `${condition}：${interpretation}` : pickText(item);
+}).filter((item): item is string => Boolean(item)));
+const threeDayObservation = computed(() => pickList(
+  structured.value.threeDayObservation,
+  structured.value.three_day_observation,
+));
+const followupQuestions = computed(() => pickList(
+  structured.value.followupQuestions,
+  structured.value.followup_questions,
 ));
 const riskText = computed(() => {
   const tips = pickList(
@@ -364,6 +410,23 @@ function featureGroupLabel(value?: string) {
 
 function formatScore(score?: number) {
   return typeof score === "number" ? score.toFixed(3) : "-";
+}
+
+function pickObject(...values: unknown[]) {
+  for (const value of values) {
+    if (value && typeof value === "object" && !Array.isArray(value)) return value as Record<string, unknown>;
+  }
+  return {} as Record<string, unknown>;
+}
+
+function pickRecordList(...values: unknown[]) {
+  for (const value of values) {
+    if (Array.isArray(value)) {
+      const result = value.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object" && !Array.isArray(item));
+      if (result.length) return result;
+    }
+  }
+  return [] as Record<string, unknown>[];
 }
 
 function pickText(...values: unknown[]) {
@@ -596,6 +659,10 @@ onMounted(load);
 
 .interpretation-card { display: flex; gap: 14px; padding: 20px; border-radius: 16px; background: #eef4ef; color: #315943; }
 .interpretation-card p { margin: 0; color: #52675a; line-height: 1.85; }
+.schema2-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 14px; }
+.schema2-list article { padding: 16px; border: 1px solid rgba(201, 210, 202, 0.75); border-radius: 14px; background: #fbfcf9; }
+.schema2-list h3 { margin: 0 0 9px; color: #344b3e; font-size: 13px; }
+.schema2-list ul { display: grid; gap: 7px; margin: 0; padding-left: 18px; color: #727d75; font-size: 11px; line-height: 1.65; }
 .advice-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
 .advice-grid article { padding: 18px; border: 1px solid rgba(201, 210, 202, 0.75); border-radius: 16px; background: #fbfcf9; }
 .advice-icon { display: grid; width: 38px; height: 38px; place-items: center; border-radius: 12px; }
@@ -603,6 +670,7 @@ onMounted(load);
 .advice-icon.move { background: #e5f0e9; color: #3e7756; }
 .advice-icon.rest { background: #e9e7f3; color: #6d6590; }
 .advice-grid h3 { margin: 14px 0 10px; font-size: 14px; }
+.plan-goal { margin: 0 0 10px; color: #52675a; font-size: 11px; line-height: 1.6; }
 .advice-grid ul { display: grid; gap: 7px; margin: 0; padding-left: 18px; color: #727d75; font-size: 11px; line-height: 1.65; }
 
 .rag-status { padding: 6px 9px; border-radius: 999px; background: #f1f3ef; color: #7a857d; font-size: 9px; }
@@ -640,6 +708,7 @@ onMounted(load);
   .head-actions { width: 100%; flex-wrap: wrap; }
   .kpi-strip,
   .feature-grid,
+  .schema2-list,
   .advice-grid { grid-template-columns: 1fr; }
   .content-section { padding: 20px; }
 }

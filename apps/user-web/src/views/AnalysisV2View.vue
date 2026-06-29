@@ -17,7 +17,13 @@
           <div class="message-main">
             <div :class="['message-bubble', message.status.toLowerCase()]">
               <img v-if="message.imageUrl" class="message-image" :src="message.imageUrl" alt="舌象图片" />
-              <p v-if="!message.structuredContent">{{ message.content }}</p>
+              <div v-if="isThinkingMessage(message)" class="thinking-card">
+                <span class="thinking-dot"></span>
+                <span>{{ message.thinkingStage || "处理中" }}</span>
+              </div>
+              <p v-else-if="!message.structuredContent">
+                {{ visibleMessageContent(message) }}<span v-if="message.typing" class="type-cursor"></span>
+              </p>
 
               <div
                 v-if="message.role === 'assistant' && message.structuredContent"
@@ -27,7 +33,7 @@
                   {{ message.structuredContent.title }}
                 </h3>
                 <p
-                  v-if="message.structuredContent.summary && message.structuredContent.summary !== message.content"
+                  v-if="message.structuredContent.summary"
                   class="structured-summary"
                 >
                   {{ message.structuredContent.summary }}
@@ -71,7 +77,7 @@
                   :status="progressStatus(message.task)"
                   :indeterminate="isTaskRunning(message.task)"
                 />
-                <span class="stage">{{ message.task.currentStage || message.task.status }}</span>
+                <span class="stage">{{ taskStageLabel(message.task) }}</span>
               </div>
 
               <div
@@ -153,9 +159,11 @@ import {
 type ChatRole = "assistant" | "user";
 
 interface StructuredSection {
+  sectionKey?: string;
   title?: string;
   content?: string;
   items?: unknown[];
+  metadata?: Record<string, unknown>;
 }
 
 interface StructuredAnswer {
@@ -180,6 +188,9 @@ interface ChatMessage {
   imageUrl?: string;
   task?: TaskStatus;
   reportRef?: AgentReportRef;
+  thinkingStage?: string;
+  typing?: boolean;
+  displayContent?: string;
 }
 
 interface LatestReportContext {
@@ -212,6 +223,19 @@ const conversationId = ref(`conversation_${createId()}`);
 const messages = ref<ChatMessage[]>([]);
 const latestReport = ref<LatestReportContext | null>(null);
 const pollingTaskIds = new Set<number>();
+const thinkingTimers = new Map<string, number>();
+const typingTimers = new Map<string, number>();
+
+// ponytail: local stage labels until chat streaming exists.
+const THINKING_STAGES = ["理解你的问题", "读取上下文", "整理报告信息", "生成回答"];
+const TASK_STAGE_LABELS: Record<string, string> = {
+  MODEL_ANALYZING: "分析舌象图像",
+  RAG_RETRIEVING: "检索知识库",
+  REPORT_GENERATING: "生成报告",
+  COMPLETED: "分析完成",
+  FAILED: "分析失败",
+  CANCELED: "已取消",
+};
 
 const fileSize = computed(() => {
   const size = selectedFile.value?.size || 0;
@@ -238,6 +262,97 @@ function chatStorageKey() {
   return `${CHAT_SESSION_PREFIX}_${currentUserId()}`;
 }
 
+function visibleMessageContent(message: ChatMessage) {
+  return message.displayContent ?? message.content;
+}
+
+function isThinkingMessage(message: ChatMessage) {
+  return message.role === "assistant" && message.status === "PENDING" && !message.task && !message.typing;
+}
+
+function prefersReducedMotion() {
+  return typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+}
+
+function stopThinking(messageId: string) {
+  const timer = thinkingTimers.get(messageId);
+  if (timer) window.clearInterval(timer);
+  thinkingTimers.delete(messageId);
+}
+
+function startThinking(message: ChatMessage) {
+  stopThinking(message.id);
+  let index = 0;
+  message.thinkingStage = THINKING_STAGES[index];
+  const timer = window.setInterval(() => {
+    index += 1;
+    if (index >= THINKING_STAGES.length) {
+      stopThinking(message.id);
+      return;
+    }
+    message.thinkingStage = THINKING_STAGES[index];
+  }, 900);
+  thinkingTimers.set(message.id, timer);
+}
+
+function stopTyping(message: ChatMessage) {
+  const timer = typingTimers.get(message.id);
+  if (timer) window.clearInterval(timer);
+  typingTimers.delete(message.id);
+  message.typing = false;
+  message.displayContent = undefined;
+}
+
+function typeAssistantMessage(message: ChatMessage, finalText: string, done?: () => void) {
+  stopTyping(message);
+  message.content = finalText;
+  if (prefersReducedMotion() || finalText.length < 2) {
+    message.displayContent = undefined;
+    done?.();
+    saveChatSession();
+    return;
+  }
+
+  let index = 0;
+  message.typing = true;
+  message.displayContent = "";
+  const timer = window.setInterval(() => {
+    index = Math.min(finalText.length, index + 6);
+    message.displayContent = finalText.slice(0, index);
+    void scrollToBottom();
+    if (index < finalText.length) return;
+    const currentTimer = typingTimers.get(message.id);
+    if (currentTimer) window.clearInterval(currentTimer);
+    typingTimers.delete(message.id);
+    message.typing = false;
+    message.displayContent = undefined;
+    done?.();
+    saveChatSession();
+    void scrollToBottom();
+  }, 24);
+  typingTimers.set(message.id, timer);
+}
+
+function clearTransientTimers() {
+  for (const timer of thinkingTimers.values()) window.clearInterval(timer);
+  for (const timer of typingTimers.values()) window.clearInterval(timer);
+  thinkingTimers.clear();
+  typingTimers.clear();
+  for (const message of messages.value) {
+    message.thinkingStage = undefined;
+    if (!message.typing) continue;
+    message.typing = false;
+    message.displayContent = undefined;
+    if (message.status === "PENDING" && message.content) message.status = "COMPLETED";
+  }
+}
+
+function taskStageLabel(task?: TaskStatus) {
+  if (!task) return "处理中";
+  const stage = task.currentStage || task.status;
+  return TASK_STAGE_LABELS[stage] || stage || "处理中";
+}
+
 function sanitizeStructuredContent(value: unknown): StructuredAnswer | undefined {
   if (!value || typeof value !== "object") return undefined;
   const raw = value as Record<string, unknown>;
@@ -245,9 +360,17 @@ function sanitizeStructuredContent(value: unknown): StructuredAnswer | undefined
     ? raw.sections
         .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object")
         .map((item) => ({
+          sectionKey: typeof item.section_key === "string"
+            ? item.section_key
+            : typeof item.sectionKey === "string"
+              ? item.sectionKey
+              : undefined,
           title: typeof item.title === "string" ? item.title : undefined,
           content: typeof item.content === "string" ? item.content : undefined,
           items: Array.isArray(item.items) ? item.items : undefined,
+          metadata: item.metadata && typeof item.metadata === "object"
+            ? item.metadata as Record<string, unknown>
+            : undefined,
         }))
     : undefined;
   return {
@@ -327,19 +450,29 @@ function restoreChatSession() {
 }
 
 function saveChatSession() {
+  if (messages.value.some((message) => message.typing)) return;
   const session: StoredChatSessionV2 = {
     schemaVersion: 2,
     userId: currentUserId(),
     threadId: chatThreadId.value,
     conversationId: conversationId.value,
-    messages: messages.value.slice(-80).map((message) => {
-      if (message.role === "user") return { ...message, reportRef: undefined, structuredContent: undefined };
-      return message;
-    }),
+    messages: messages.value.slice(-80).map(toStoredMessage),
     latestReport: latestReport.value,
     updatedAt: Date.now(),
   };
   localStorage.setItem(chatStorageKey(), JSON.stringify(session));
+}
+
+function toStoredMessage(message: ChatMessage) {
+  const stored = { ...message };
+  delete stored.thinkingStage;
+  delete stored.typing;
+  delete stored.displayContent;
+  if (message.role === "user") {
+    delete stored.reportRef;
+    delete stored.structuredContent;
+  }
+  return stored;
 }
 
 function rememberLatestReport(report: ReportDetail) {
@@ -457,9 +590,11 @@ async function sendTextChat(content: string, requestId: string, userMessageId: s
     requestId,
     role: "assistant",
     contentType: "text",
-    content: "正在思考...",
+    content: "",
     status: "PENDING",
   });
+  const placeholder = messages.value[messages.value.length - 1];
+  if (placeholder) startThinking(placeholder);
   await scrollToBottom();
 
   try {
@@ -476,21 +611,37 @@ async function sendTextChat(content: string, requestId: string, userMessageId: s
 
     const target = messages.value.find((item) => item.id === placeholderId && item.requestId === requestId);
     if (!target) return;
+    stopThinking(placeholderId);
     chatThreadId.value = response.threadId || chatThreadId.value;
     conversationId.value = response.conversationId || conversationId.value;
+    const finalContent = response.assistantMessage.content || "我暂时没有生成有效回复。";
+    const structuredContent = sanitizeStructuredContent(response.assistantMessage.structuredContent);
+    const reportRef = response.assistantMessage.reportRef;
     target.turnId = response.turnId;
     target.serverMessageId = response.assistantMessage.messageId;
     target.id = response.assistantMessage.messageId || target.id;
     target.contentType = response.assistantMessage.contentType;
-    target.content = response.assistantMessage.content || "我暂时没有生成有效回复。";
-    target.structuredContent = sanitizeStructuredContent(response.assistantMessage.structuredContent);
-    target.reportRef = response.assistantMessage.reportRef;
-    target.status = response.status === "FAILED" ? "FAILED" : "COMPLETED";
-    if (target.reportRef?.reportId) latestReport.value = { reportId: target.reportRef.reportId };
+    target.content = finalContent;
+    if (response.status === "FAILED") {
+      target.structuredContent = structuredContent;
+      target.reportRef = reportRef;
+      target.status = "FAILED";
+      return;
+    }
+    target.structuredContent = undefined;
+    target.reportRef = undefined;
+    typeAssistantMessage(target, finalContent, () => {
+      target.structuredContent = structuredContent;
+      target.reportRef = reportRef;
+      target.status = "COMPLETED";
+      if (target.reportRef?.reportId) latestReport.value = { reportId: target.reportRef.reportId };
+    });
   } catch (error) {
     console.error("chat v2 failed", error);
+    stopThinking(placeholderId);
     const target = messages.value.find((item) => item.id === placeholderId && item.requestId === requestId);
     if (target) {
+      stopTyping(target);
       target.status = "FAILED";
       target.content = error instanceof Error ? error.message : "发送失败，请稍后再试。";
       target.reportRef = undefined;
@@ -557,13 +708,17 @@ async function pollAnalysisTask(taskId: number, assistantMessage: ChatMessage) {
       if (task.status === "COMPLETED") {
         const report = await tongueApi.report(task.reportId);
         rememberLatestReport(report);
-        assistantMessage.reportRef = { reportId: task.reportId, relation: "GENERATED" };
-        assistantMessage.content = report.summary || report.featureSummary || "报告已生成，可以查看完整报告。";
-        assistantMessage.status = "COMPLETED";
+        const finalContent = report.summary || report.featureSummary || "报告已生成，可以查看完整报告。";
+        assistantMessage.reportRef = undefined;
+        typeAssistantMessage(assistantMessage, finalContent, () => {
+          assistantMessage.reportRef = { reportId: task.reportId, relation: "GENERATED" };
+          assistantMessage.status = "COMPLETED";
+        });
         ElMessage.success("报告已生成");
         return;
       }
       if (["FAILED", "CANCELED"].includes(task.status)) {
+        stopTyping(assistantMessage);
         assistantMessage.status = "FAILED";
         assistantMessage.content = task.errorMessage || "分析任务未完成，请稍后重试。";
         return;
@@ -614,7 +769,10 @@ onMounted(async () => {
   await scrollToBottom();
 });
 
-onBeforeUnmount(saveChatSession);
+onBeforeUnmount(() => {
+  clearTransientTimers();
+  saveChatSession();
+});
 watch([messages, chatThreadId, conversationId, latestReport], saveChatSession, { deep: true });
 </script>
 
@@ -636,6 +794,9 @@ watch([messages, chatThreadId, conversationId, latestReport], saveChatSession, {
 .message-row.user .message-bubble { margin-left: auto; border-color: #cfe5ff; border-radius: 18px 18px 6px 18px; background: #e8f3ff; box-shadow: none; }
 .message-bubble.failed { border-color: #f5c2c7; background: #fff7f7; }
 .message-bubble p { margin: 0; white-space: pre-wrap; word-break: break-word; line-height: 1.75; font-size: 15px; }
+.thinking-card { display: inline-flex; align-items: center; gap: 8px; color: var(--th-text-muted); font-size: 14px; }
+.thinking-dot { width: 8px; height: 8px; border-radius: 999px; background: var(--th-primary); animation: thinking-pulse 1s ease-in-out infinite; }
+.type-cursor { display: inline-block; width: 1px; height: 1em; margin-left: 2px; vertical-align: -2px; background: currentColor; animation: cursor-blink .9s steps(1) infinite; }
 .message-image { display: block; width: min(280px, 100%); max-height: 280px; object-fit: contain; margin-bottom: 12px; border-radius: 14px; background: #edf2f7; }
 .structured-answer { display: grid; gap: 12px; width: min(620px, 100%); margin-top: 16px; padding: 16px; border: 1px solid #dce7df; border-radius: 14px; background: #f8fbf9; }
 .structured-answer h3 { margin: 0; color: var(--th-primary-dark); font-size: 18px; line-height: 1.45; }
@@ -662,6 +823,16 @@ watch([messages, chatThreadId, conversationId, latestReport], saveChatSession, {
 .image-upload-button { height: 42px; border-radius: 14px; color: #20604f; border-color: #b9ded2; background: #f0faf6; }
 .send-button { width: 44px; height: 42px; padding: 0; border-radius: 14px; }
 .prompt-input :deep(.el-textarea__inner) { min-height: 42px !important; padding: 10px 4px; border: 0; box-shadow: none; line-height: 1.55; font-size: 15px; }
+@keyframes thinking-pulse {
+  0%, 100% { opacity: .35; transform: scale(.82); }
+  50% { opacity: 1; transform: scale(1); }
+}
+@keyframes cursor-blink {
+  50% { opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .thinking-dot, .type-cursor { animation: none; }
+}
 @media (max-width: 760px) {
   .chat-page { min-height: calc(100vh - 92px); margin: -14px -14px 0; }
   .chat-scroll { height: calc(100vh - 92px); padding: 24px 12px 180px; }

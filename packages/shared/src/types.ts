@@ -127,12 +127,30 @@ export interface StructuredReport {
   schemaVersion?: string;
   comprehensiveSummary?: string;
   tongueFeatures?: Array<Record<string, unknown>>;
+  recognitionEvidence?: Array<Record<string, unknown>>;
+  recognitionLimits?: Array<Record<string, unknown>>;
+  dimensionValues?: Array<Record<string, unknown>>;
+  conditionalAnalysis?: Array<Record<string, unknown>>;
+  tongueFeatureExplanation?: string;
+  dietPlan?: ReportPlan;
+  sleepPlan?: ReportPlan;
+  exercisePlan?: ReportPlan;
+  threeDayObservation?: string[];
+  followupQuestions?: string[];
   healthInterpretation?: string;
   dietaryAdvice?: string[];
   exerciseAdvice?: string[];
   lifestyleAdvice?: string[];
   riskTips?: string[];
   evidenceRefs?: Array<Record<string, unknown>>;
+}
+
+export interface ReportPlan {
+  goal?: string;
+  actions?: string[];
+  frequency?: string;
+  duration?: string;
+  observationMetrics?: string[];
 }
 
 export interface ReportDetail {
