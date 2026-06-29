@@ -10,6 +10,7 @@ import type {
   DailyCheckinRequest,
   FeatureTrend,
   HealthPlan,
+  HealthPlanDraftUpdateRequest,
   NotificationItem,
   ReportCompareResult,
   ReportDetail,
@@ -218,8 +219,20 @@ export const healthPlanApi = {
   current() {
     return apiRequest<HealthPlan | null>("/api/health-plans/current");
   },
+  detail(planId: number) {
+    return apiRequest<HealthPlan>(`/api/health-plans/${planId}`);
+  },
   fromReport(reportId: number) {
     return apiRequest<HealthPlan>(`/api/health-plans/from-report/${reportId}`, { method: "POST" });
+  },
+  draftFromReport(reportId: number) {
+    return apiRequest<HealthPlan>(`/api/health-plans/from-report/${reportId}/draft`, { method: "POST" });
+  },
+  updateDraft(planId: number, body: HealthPlanDraftUpdateRequest) {
+    return apiRequest<HealthPlan>(`/api/health-plans/${planId}/draft`, { method: "PUT", body });
+  },
+  activate(planId: number) {
+    return apiRequest<HealthPlan>(`/api/health-plans/${planId}/activate`, { method: "POST" });
   },
   close(planId: number) {
     return apiRequest<HealthPlan>(`/api/health-plans/${planId}/close`, { method: "POST" });
