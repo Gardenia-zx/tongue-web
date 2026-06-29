@@ -139,9 +139,9 @@
                 <span>目标入睡时间</span>
                 <el-time-select
                   v-model="currentDay.sleep.targetBedtime"
-                  start="21:00"
+                  start="00:00"
                   step="00:15"
-                  end="02:00"
+                  end="23:45"
                   placeholder="选择时间"
                 />
               </label>
@@ -149,9 +149,9 @@
                 <span>目标起床时间</span>
                 <el-time-select
                   v-model="currentDay.sleep.targetWakeTime"
-                  start="05:00"
+                  start="00:00"
                   step="00:15"
-                  end="10:00"
+                  end="23:45"
                   placeholder="选择时间"
                 />
               </label>
