@@ -250,6 +250,41 @@ export interface NotificationItem {
   createdAt?: string;
 }
 
+export interface HealthPlanDietDay {
+  breakfast: string[];
+  lunch: string[];
+  dinner: string[];
+  avoid: string[];
+}
+
+export interface HealthPlanExerciseDay {
+  activity: string;
+  durationMinutes: number;
+  intensity: string;
+  warmup: string[];
+  cooldown: string[];
+}
+
+export interface HealthPlanSleepDay {
+  targetBedtime: string;
+  targetWakeTime: string;
+  actions: string[];
+}
+
+export interface HealthPlanDay {
+  dayIndex: number;
+  date: string;
+  diet: HealthPlanDietDay;
+  exercise: HealthPlanExerciseDay;
+  sleep: HealthPlanSleepDay;
+  observations: string[];
+}
+
+export interface HealthPlanDraftUpdateRequest {
+  schemaVersion?: string;
+  days: HealthPlanDay[];
+}
+
 export interface HealthPlan {
   planId: number;
   userId?: number;
@@ -261,6 +296,10 @@ export interface HealthPlan {
   sleepGoal?: ReportPlan;
   exerciseGoal?: ReportPlan;
   observationItems?: string[];
+  days?: HealthPlanDay[];
+  schemaVersion?: string;
+  generationMode?: string;
+  activatedAt?: string;
   todayCheckin?: DailyCheckin | null;
   nextRetakeDate?: string;
   personalizationSignals?: string[];
