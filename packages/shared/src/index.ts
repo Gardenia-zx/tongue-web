@@ -1,7 +1,9 @@
 export * from "./types";
+export * from "./health-plan-review";
 export * from "./api/client";
 export * from "./api/modules";
 export * from "./api/agent-v2";
+export * from "./api/health-plan-review";
 export * from "./stores/auth";
 export * from "./utils/format";
 export { default as AppShell } from "./components/AppShell.vue";
