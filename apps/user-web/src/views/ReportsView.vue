@@ -53,7 +53,7 @@
       </article>
 
       <article class="overview-card overview-completed">
-        <span class="overview-icon"><CircleCheck2 :size="21" /></span>
+        <span class="overview-icon"><CircleCheck :size="21" /></span>
         <span class="overview-copy">
           <small>已完成分析</small>
           <strong>{{ completedCount }}<em>份</em></strong>
@@ -259,7 +259,7 @@ import {
   ArrowRight,
   ArrowUpRight,
   CalendarDays,
-  CircleCheck2,
+  CircleCheck,
   Clock3,
   FileSearch,
   FileText,
