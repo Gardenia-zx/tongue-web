@@ -9,7 +9,7 @@
         <div class="hero-actions">
           <button v-if="plan" class="primary-action" type="button" @click="scrollToCheckin">
             <CheckCircle2 :size="17" />
-            {{ todayRecorded ? "查看今日记录" : "开始今日打卡" }}
+            {{ todayRecorded ? "查看今日成果" : "开始今日打卡" }}
             <ArrowRight :size="16" />
           </button>
           <RouterLink v-else class="primary-action" to="/reports">
@@ -212,134 +212,262 @@
       </section>
 
       <section ref="checkinPanel" :class="[ 'checkin-panel', { recorded: todayRecorded } ]">
-        <div class="checkin-heading">
-          <div>
-            <span class="page-kicker">TODAY · {{ todayLabel }}</span>
-            <h2>{{ todayRecorded ? "今天的健康记录已完成" : "记录今天的执行情况" }}</h2>
-            <p>{{ todayRecorded ? "今日打卡已经锁定，明天可以继续记录新的执行情况。" : "勾选真实完成的内容即可，不需要为了满分而勉强执行。" }}</p>
-          </div>
+        <template v-if="todayRecorded">
+          <div class="completion-celebration">
+            <div class="celebration-confetti" aria-hidden="true">
+              <i v-for="index in 12" :key="index" :class="`confetti-${index}`" />
+            </div>
 
-          <div :class="[ 'completion-badge', { done: todayRecorded } ]">
-            <strong>{{ completedCount }}/3</strong>
-            <span>{{ todayRecorded ? "已记录" : "已完成" }}</span>
-          </div>
-        </div>
+            <div class="celebration-copy">
+              <span class="page-kicker">TODAY COMPLETE · {{ todayLabel }}</span>
+              <h2>{{ celebrationTitle }}</h2>
+              <p>{{ celebrationMessage }}</p>
 
-        <div class="completion-track" aria-hidden="true">
-          <i :style="{ width: `${completionPercent}%` }" />
-        </div>
+              <div class="celebration-actions">
+                <RouterLink class="celebration-primary" to="/trends">
+                  <TrendingUp :size="16" />
+                  查看健康趋势
+                  <ArrowRight :size="15" />
+                </RouterLink>
+                <button class="celebration-secondary" type="button" @click="scrollToHistory">
+                  <History :size="16" />
+                  查看最近记录
+                </button>
+              </div>
+            </div>
 
-        <div class="check-grid">
-          <button
-            type="button"
-            :class="[ 'check-item diet', { active: form.dietDone } ]"
-            :disabled="todayRecorded"
-            :aria-pressed="form.dietDone"
-            @click="toggleTask('dietDone')"
-          >
-            <span class="task-icon"><Utensils :size="20" /></span>
-            <span class="task-copy">
-              <strong>饮食执行</strong>
-              <small>按计划完成今天主要饮食安排</small>
-            </span>
-            <span class="task-check"><Check :size="15" /></span>
-          </button>
-
-          <button
-            type="button"
-            :class="[ 'check-item sleep', { active: form.sleepDone } ]"
-            :disabled="todayRecorded"
-            :aria-pressed="form.sleepDone"
-            @click="toggleTask('sleepDone')"
-          >
-            <span class="task-icon"><MoonStar :size="20" /></span>
-            <span class="task-copy">
-              <strong>睡眠记录</strong>
-              <small>记录作息和睡眠恢复情况</small>
-            </span>
-            <span class="task-check"><Check :size="15" /></span>
-          </button>
-
-          <button
-            type="button"
-            :class="[ 'check-item move', { active: form.exerciseDone } ]"
-            :disabled="todayRecorded"
-            :aria-pressed="form.exerciseDone"
-            @click="toggleTask('exerciseDone')"
-          >
-            <span class="task-icon"><Dumbbell :size="20" /></span>
-            <span class="task-copy">
-              <strong>运动完成</strong>
-              <small>完成今天适合自己的活动</small>
-            </span>
-            <span class="task-check"><Check :size="15" /></span>
-          </button>
-        </div>
-
-        <div v-if="plan.observationItems?.length" class="observation-section">
-          <div class="subsection-heading">
-            <span class="subsection-icon"><Leaf :size="17" /></span>
-            <div>
-              <strong>今日身体观察</strong>
-              <small>选择今天有留意的身体变化，可多选</small>
+            <div class="celebration-emblem" aria-hidden="true">
+              <span class="emblem-halo" />
+              <span class="emblem-ring ring-outer" />
+              <span class="emblem-ring ring-inner" />
+              <div class="emblem-core">
+                <CheckCircle2 :size="64" :stroke-width="1.65" />
+              </div>
+              <span class="emblem-spark spark-a" />
+              <span class="emblem-spark spark-b" />
+              <span class="emblem-spark spark-c" />
             </div>
           </div>
 
-          <div class="observation-chips">
-            <button
-              v-for="item in plan.observationItems"
-              :key="item"
-              type="button"
-              :class="{ active: selectedObservations.includes(item) }"
-              :disabled="todayRecorded"
-              @click="toggleObservation(item)"
+          <div class="completion-metrics" aria-label="今日完成摘要">
+            <article>
+              <span class="metric-icon"><ShieldCheck :size="18" /></span>
+              <div><small>记录状态</small><strong>已安全保存</strong></div>
+            </article>
+            <article>
+              <span class="metric-icon"><CheckCircle2 :size="18" /></span>
+              <div><small>计划执行</small><strong>{{ completedCount }}/3 项</strong></div>
+            </article>
+            <article>
+              <span class="metric-icon"><History :size="18" /></span>
+              <div><small>累计记录</small><strong>{{ summary?.checkinCount || 0 }} 天</strong></div>
+            </article>
+            <article>
+              <span class="metric-icon"><Leaf :size="18" /></span>
+              <div><small>身体观察</small><strong>{{ selectedObservations.length }} 项</strong></div>
+            </article>
+          </div>
+
+          <div class="record-review">
+            <div class="record-review-heading">
+              <div>
+                <span class="page-kicker">TODAY'S RECORD</span>
+                <h3>今天留下了这些记录</h3>
+              </div>
+              <span>真实记录比勉强满分更有价值</span>
+            </div>
+
+            <div class="recorded-task-grid">
+              <article :class="{ done: form.dietDone }">
+                <span><Utensils :size="18" /></span>
+                <div>
+                  <strong>饮食执行</strong>
+                  <small>{{ form.dietDone ? "已完成" : "今日未勾选" }}</small>
+                </div>
+                <Check v-if="form.dietDone" :size="15" />
+              </article>
+              <article :class="{ done: form.sleepDone }">
+                <span><MoonStar :size="18" /></span>
+                <div>
+                  <strong>睡眠记录</strong>
+                  <small>{{ form.sleepDone ? "已完成" : "今日未勾选" }}</small>
+                </div>
+                <Check v-if="form.sleepDone" :size="15" />
+              </article>
+              <article :class="{ done: form.exerciseDone }">
+                <span><Dumbbell :size="18" /></span>
+                <div>
+                  <strong>运动完成</strong>
+                  <small>{{ form.exerciseDone ? "已完成" : "今日未勾选" }}</small>
+                </div>
+                <Check v-if="form.exerciseDone" :size="15" />
+              </article>
+            </div>
+
+            <div v-if="selectedObservations.length" class="recorded-observations">
+              <div class="record-subheading">
+                <span><Leaf :size="17" /></span>
+                <div><strong>身体观察</strong><small>今天留意到的身体变化</small></div>
+              </div>
+              <div class="recorded-chips">
+                <span v-for="item in selectedObservations" :key="item">
+                  <Check :size="12" />
+                  {{ item }}
+                </span>
+              </div>
+            </div>
+
+            <div v-if="form.note" class="recorded-note">
+              <span><ClipboardList :size="18" /></span>
+              <div>
+                <strong>补充记录</strong>
+                <p>{{ form.note }}</p>
+              </div>
+            </div>
+
+            <div
+              v-if="completedCount === 0 && !selectedObservations.length && !form.note"
+              class="honest-record"
             >
-              <Check v-if="selectedObservations.includes(item)" :size="13" />
-              {{ item }}
+              <span><Sparkles :size="20" /></span>
+              <div>
+                <strong>今天选择了如实记录</strong>
+                <p>没有勾选具体任务也没关系。承认今天的真实状态，是建立长期健康习惯的重要一步。</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="tomorrow-message">
+            <span class="tomorrow-icon"><Sparkles :size="20" /></span>
+            <div>
+              <span class="page-kicker">KEEP GOING</span>
+              <strong>明天继续，不必追求每一天都满分</strong>
+              <p>长期变化来自稳定而真实的记录。保持自己的节奏，坚持会让趋势越来越清晰。</p>
+            </div>
+            <span class="tomorrow-day">DAY {{ Math.min(currentDayNumber + 1, totalPlanDays) }}</span>
+          </div>
+        </template>
+
+        <template v-else>
+          <div class="checkin-heading">
+            <div>
+              <span class="page-kicker">TODAY · {{ todayLabel }}</span>
+              <h2>记录今天的执行情况</h2>
+              <p>勾选真实完成的内容即可，不需要为了满分而勉强执行。</p>
+            </div>
+
+            <div class="completion-badge">
+              <strong>{{ completedCount }}/3</strong>
+              <span>已完成</span>
+            </div>
+          </div>
+
+          <div class="completion-track" aria-hidden="true">
+            <i :style="{ width: `${completionPercent}%` }" />
+          </div>
+
+          <div class="check-grid">
+            <button
+              type="button"
+              :class="[ 'check-item diet', { active: form.dietDone } ]"
+              :aria-pressed="form.dietDone"
+              @click="toggleTask('dietDone')"
+            >
+              <span class="task-icon"><Utensils :size="20" /></span>
+              <span class="task-copy">
+                <strong>饮食执行</strong>
+                <small>按计划完成今天主要饮食安排</small>
+              </span>
+              <span class="task-check"><Check :size="15" /></span>
+            </button>
+
+            <button
+              type="button"
+              :class="[ 'check-item sleep', { active: form.sleepDone } ]"
+              :aria-pressed="form.sleepDone"
+              @click="toggleTask('sleepDone')"
+            >
+              <span class="task-icon"><MoonStar :size="20" /></span>
+              <span class="task-copy">
+                <strong>睡眠记录</strong>
+                <small>记录作息和睡眠恢复情况</small>
+              </span>
+              <span class="task-check"><Check :size="15" /></span>
+            </button>
+
+            <button
+              type="button"
+              :class="[ 'check-item move', { active: form.exerciseDone } ]"
+              :aria-pressed="form.exerciseDone"
+              @click="toggleTask('exerciseDone')"
+            >
+              <span class="task-icon"><Dumbbell :size="20" /></span>
+              <span class="task-copy">
+                <strong>运动完成</strong>
+                <small>完成今天适合自己的活动</small>
+              </span>
+              <span class="task-check"><Check :size="15" /></span>
             </button>
           </div>
-        </div>
 
-        <div class="note-section">
-          <div class="subsection-heading">
-            <span class="subsection-icon"><ClipboardList :size="17" /></span>
-            <div>
-              <strong>补充记录</strong>
-              <small>写下饮食、睡眠、运动或身体感受</small>
+          <div v-if="plan.observationItems?.length" class="observation-section">
+            <div class="subsection-heading">
+              <span class="subsection-icon"><Leaf :size="17" /></span>
+              <div>
+                <strong>今日身体观察</strong>
+                <small>选择今天有留意的身体变化，可多选</small>
+              </div>
+            </div>
+
+            <div class="observation-chips">
+              <button
+                v-for="item in plan.observationItems"
+                :key="item"
+                type="button"
+                :class="{ active: selectedObservations.includes(item) }"
+                @click="toggleObservation(item)"
+              >
+                <Check v-if="selectedObservations.includes(item)" :size="13" />
+                {{ item }}
+              </button>
             </div>
           </div>
 
-          <div class="textarea-wrap">
-            <textarea
-              v-model="form.note"
-              maxlength="500"
-              :disabled="todayRecorded"
-              placeholder="例如：午饭后有些腹胀，晚饭后快走了 20 分钟，今晚准备 23:30 前睡觉。"
-            />
-            <span>{{ form.note.length }}/500</span>
-          </div>
-        </div>
+          <div class="note-section">
+            <div class="subsection-heading">
+              <span class="subsection-icon"><ClipboardList :size="17" /></span>
+              <div>
+                <strong>补充记录</strong>
+                <small>写下饮食、睡眠、运动或身体感受</small>
+              </div>
+            </div>
 
-        <footer class="checkin-footer">
-          <div class="save-tip">
-            <ShieldCheck :size="17" />
-            <span>{{ todayRecorded ? "今天的记录已经保存，不能重复提交。" : "提交后今日记录将锁定，避免重复打卡。" }}</span>
+            <div class="textarea-wrap">
+              <textarea
+                v-model="form.note"
+                maxlength="500"
+                placeholder="例如：午饭后有些腹胀，晚饭后快走了 20 分钟，今晚准备 23:30 前睡觉。"
+              />
+              <span>{{ form.note.length }}/500</span>
+            </div>
           </div>
 
-          <button
-            class="save-button"
-            type="button"
-            :disabled="saving || todayRecorded"
-            @click="saveCheckin"
-          >
-            <RefreshCw v-if="saving" class="spinning" :size="17" />
-            <CheckCircle2 v-else :size="17" />
-            {{ saving ? "正在保存" : todayRecorded ? "今日已记录" : "保存今日打卡" }}
-          </button>
-        </footer>
+          <footer class="checkin-footer">
+            <div class="save-tip">
+              <ShieldCheck :size="17" />
+              <span>提交后今日记录将锁定，并自动切换到今日完成页。</span>
+            </div>
+
+            <button class="save-button" type="button" :disabled="saving" @click="saveCheckin">
+              <RefreshCw v-if="saving" class="spinning" :size="17" />
+              <CheckCircle2 v-else :size="17" />
+              {{ saving ? "正在保存" : "保存今日打卡" }}
+            </button>
+          </footer>
+        </template>
       </section>
 
-      <section class="history-panel">
+      <section ref="historyPanel" class="history-panel">
         <div class="section-heading history-heading">
           <div>
             <span class="page-kicker">RECENT CHECK-INS</span>
@@ -424,7 +552,6 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from "vue";
-import { useRouter } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
 import {
   Activity,
@@ -457,7 +584,6 @@ import {
 
 type TaskKey = "dietDone" | "sleepDone" | "exerciseDone";
 
-const router = useRouter();
 const loading = ref(false);
 const saving = ref(false);
 const plan = ref<HealthPlan | null>(null);
@@ -465,6 +591,7 @@ const summary = ref<CheckinSummary | null>(null);
 const checkins = ref<DailyCheckin[]>([]);
 const selectedObservations = ref<string[]>([]);
 const checkinPanel = ref<HTMLElement | null>(null);
+const historyPanel = ref<HTMLElement | null>(null);
 const form = reactive({
   dietDone: false,
   sleepDone: false,
@@ -483,8 +610,22 @@ const todayRecorded = computed(() => Boolean(plan.value?.todayCheckin));
 const completedCount = computed(() => [form.dietDone, form.sleepDone, form.exerciseDone].filter(Boolean).length);
 const completionPercent = computed(() => Math.round((completedCount.value / 3) * 100));
 const todayStatusText = computed(() => todayRecorded.value
-  ? `完成 ${completedCount.value}/3 项，今日不可重复提交`
+  ? `完成 ${completedCount.value}/3 项，今日记录已保存`
   : `当前完成 ${completedCount.value}/3 项，等待保存`);
+const celebrationTitle = computed(() => {
+  if (completedCount.value === 3) return "太棒了，今天的计划全部完成";
+  if (completedCount.value > 0) return "今天的记录已完成，持续比完美更重要";
+  return "今天的真实记录已经保存";
+});
+const celebrationMessage = computed(() => {
+  if (completedCount.value === 3) {
+    return "你完成了饮食、睡眠和运动三项记录。保持这样的节奏，长期变化会越来越清晰。";
+  }
+  if (completedCount.value > 0) {
+    return `你完成了 ${completedCount.value} 项计划，也如实记录了今天的状态。每一次稳定积累都值得肯定。`;
+  }
+  return "今天没有勉强勾选未完成的任务，而是留下了真实状态。真实记录本身，就是建立健康习惯的重要一步。";
+});
 
 const todayPlanDay = computed(() => {
   const days = plan.value?.days || [];
@@ -611,29 +752,21 @@ function scrollToCheckin() {
   checkinPanel.value?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
+function scrollToHistory() {
+  historyPanel.value?.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
 function toggleTask(key: TaskKey) {
-  if (todayRecorded.value) {
-    ElMessage.info("今天已经记录了，明天再来打卡吧");
-    return;
-  }
   form[key] = !form[key];
 }
 
 function toggleObservation(item: string) {
-  if (todayRecorded.value) {
-    ElMessage.info("今天已经记录了，不能再次修改");
-    return;
-  }
   selectedObservations.value = selectedObservations.value.includes(item)
     ? selectedObservations.value.filter((value) => value !== item)
     : [...selectedObservations.value, item];
 }
 
 async function saveCheckin() {
-  if (todayRecorded.value) {
-    ElMessage.info("今天已经记录了，明天再来打卡吧");
-    return;
-  }
   if (saving.value) return;
 
   saving.value = true;
@@ -645,8 +778,9 @@ async function saveCheckin() {
       observation: { checked_items: selectedObservations.value },
       note: form.note,
     });
-    ElMessage.success("今日打卡已记录，明天可以继续打卡");
+    ElMessage.success("今日记录已保存，继续保持自己的节奏");
     await load();
+    window.setTimeout(() => scrollToCheckin(), 80);
   } catch (error) {
     console.error("save health plan checkin failed", error);
     ElMessage.error(error instanceof Error ? error.message : "保存失败");
@@ -977,18 +1111,6 @@ function formatWeekday(value?: string) {
   content: "";
 }
 
-.care-glass::after {
-  position: absolute;
-  top: -45%;
-  left: -75%;
-  width: 48%;
-  height: 195%;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.62), transparent);
-  content: "";
-  transform: rotate(18deg);
-  animation: glass-shine 4.8s ease-in-out infinite;
-}
-
 .care-symbol {
   position: relative;
   z-index: 2;
@@ -1124,10 +1246,6 @@ function formatWeekday(value?: string) {
 .progress-copy strong { display: block; margin-top: 6px; color: #2d4838; font-size: 14px; }
 .progress-copy p { margin: 5px 0 0; color: #758179; font-size: 10px; line-height: 1.6; }
 
-.progress-visual {
-  min-width: 0;
-}
-
 .progress-track {
   height: 7px;
   overflow: hidden;
@@ -1178,7 +1296,7 @@ function formatWeekday(value?: string) {
 
 .plan-section { animation: reveal-up 560ms 210ms ease-out both; }
 .checkin-panel { scroll-margin-top: 24px; animation: reveal-up 560ms 260ms ease-out both; }
-.history-panel { animation: reveal-up 560ms 310ms ease-out both; }
+.history-panel { scroll-margin-top: 24px; animation: reveal-up 560ms 310ms ease-out both; }
 
 .section-heading,
 .checkin-heading {
@@ -1229,7 +1347,7 @@ function formatWeekday(value?: string) {
 .care-card {
   position: relative;
   display: flex;
-  min-height: 360px;
+  min-height: 350px;
   flex-direction: column;
   overflow: hidden;
   padding: 21px;
@@ -1371,7 +1489,412 @@ function formatWeekday(value?: string) {
 }
 
 .checkin-panel.recorded {
+  overflow: hidden;
   border-color: rgba(47, 139, 88, 0.28);
+  background:
+    radial-gradient(circle at 90% 9%, rgba(182, 227, 194, 0.28), transparent 30%),
+    radial-gradient(circle at 6% 100%, rgba(224, 241, 227, 0.55), transparent 31%),
+    linear-gradient(145deg, #fffefa, #f8fcf8);
+}
+
+.completion-celebration {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 250px;
+  align-items: center;
+  gap: 30px;
+  min-height: 270px;
+  overflow: hidden;
+  padding: 34px 38px;
+  border: 1px solid rgba(62, 147, 91, 0.2);
+  border-radius: 22px;
+  background:
+    radial-gradient(circle at 83% 36%, rgba(178, 229, 193, 0.38), transparent 25%),
+    linear-gradient(115deg, rgba(255, 255, 253, 0.98), rgba(239, 249, 241, 0.96));
+}
+
+.celebration-copy {
+  position: relative;
+  z-index: 3;
+}
+
+.celebration-copy h2 {
+  max-width: 720px;
+  margin: 11px 0 0;
+  color: #1f3a2b;
+  font-family: "Noto Serif SC", "Source Han Serif SC", "Songti SC", serif;
+  font-size: clamp(31px, 3.2vw, 44px);
+  font-weight: 570;
+  letter-spacing: -0.045em;
+  line-height: 1.28;
+}
+
+.celebration-copy > p {
+  max-width: 680px;
+  margin: 16px 0 0;
+  color: #6f8076;
+  font-size: 12px;
+  line-height: 1.8;
+}
+
+.celebration-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  margin-top: 22px;
+}
+
+.celebration-primary,
+.celebration-secondary {
+  display: inline-flex;
+  min-height: 40px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 13px;
+  border-radius: 11px;
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 680;
+  text-decoration: none;
+  transition: transform 180ms ease, box-shadow 180ms ease;
+}
+
+.celebration-primary {
+  border: 1px solid #27764e;
+  background: linear-gradient(150deg, #3e9866, #27764e);
+  color: white;
+  box-shadow: 0 9px 19px rgba(39, 118, 78, 0.18);
+}
+
+.celebration-secondary {
+  border: 1px solid rgba(71, 112, 84, 0.18);
+  background: rgba(255, 255, 255, 0.78);
+  color: #4e6959;
+}
+
+.celebration-primary:hover,
+.celebration-secondary:hover {
+  transform: translateY(-2px);
+}
+
+.celebration-emblem {
+  position: relative;
+  width: 230px;
+  height: 210px;
+  justify-self: end;
+}
+
+.emblem-halo {
+  position: absolute;
+  top: 20px;
+  left: 50%;
+  width: 150px;
+  height: 150px;
+  border-radius: 50%;
+  background: rgba(69, 178, 104, 0.24);
+  filter: blur(28px);
+  transform: translateX(-50%);
+}
+
+.emblem-ring {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  border: 1px dashed rgba(54, 147, 84, 0.24);
+  border-radius: 50%;
+}
+
+.ring-outer {
+  width: 210px;
+  height: 92px;
+  animation: celebration-orbit 8s ease-in-out infinite;
+}
+
+.ring-inner {
+  width: 166px;
+  height: 132px;
+  animation: celebration-orbit-alt 9.5s ease-in-out infinite;
+}
+
+.emblem-core {
+  position: absolute;
+  top: 30px;
+  left: 50%;
+  z-index: 3;
+  display: grid;
+  width: 134px;
+  height: 148px;
+  place-items: center;
+  border: 1px solid rgba(61, 151, 89, 0.22);
+  border-radius: 47px 47px 37px 37px;
+  background: linear-gradient(155deg, rgba(255, 255, 255, 0.96), rgba(211, 240, 218, 0.9));
+  color: #268653;
+  box-shadow:
+    0 18px 31px rgba(40, 132, 76, 0.17),
+    inset 12px 13px 17px rgba(255, 255, 255, 0.7),
+    inset -10px -12px 16px rgba(76, 157, 96, 0.11);
+  animation: emblem-float 5s ease-in-out infinite;
+}
+
+.emblem-spark {
+  position: absolute;
+  z-index: 4;
+  width: 17px;
+  height: 17px;
+}
+
+.emblem-spark::before,
+.emblem-spark::after {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  border-radius: 999px;
+  background: #7bbd90;
+  content: "";
+  transform: translate(-50%, -50%);
+}
+
+.emblem-spark::before { width: 3px; height: 17px; }
+.emblem-spark::after { width: 17px; height: 3px; }
+.spark-a { top: 27px; right: 11px; animation: sparkle 3.4s ease-in-out infinite; }
+.spark-b { left: 8px; bottom: 39px; animation: sparkle 4.1s 0.8s ease-in-out infinite; }
+.spark-c { right: 31px; bottom: 13px; animation: sparkle 3.8s 1.4s ease-in-out infinite; }
+
+.celebration-confetti i {
+  position: absolute;
+  z-index: 1;
+  display: block;
+  width: 7px;
+  height: 13px;
+  border-radius: 3px;
+  opacity: 0.45;
+  animation: confetti-float 7s ease-in-out infinite;
+}
+
+.confetti-1 { top: 16%; left: 4%; background: #66ad7f; transform: rotate(18deg); }
+.confetti-2 { top: 22%; left: 47%; background: #e0ad62; animation-delay: 0.7s !important; }
+.confetti-3 { top: 74%; left: 9%; background: #899dcc; animation-delay: 1.3s !important; }
+.confetti-4 { top: 12%; left: 68%; background: #9a82bd; transform: rotate(55deg); }
+.confetti-5 { top: 83%; left: 43%; background: #71b894; animation-delay: 1.8s !important; }
+.confetti-6 { top: 67%; left: 73%; background: #df9869; transform: rotate(-30deg); }
+.confetti-7 { top: 28%; left: 91%; background: #68b586; animation-delay: 2.1s !important; }
+.confetti-8 { top: 84%; left: 88%; background: #8b9fc7; transform: rotate(35deg); }
+.confetti-9 { top: 44%; left: 3%; background: #d9a45f; animation-delay: 0.4s !important; }
+.confetti-10 { top: 9%; left: 29%; background: #75b98a; transform: rotate(-40deg); }
+.confetti-11 { top: 51%; left: 57%; background: #a28bbb; animation-delay: 1.6s !important; }
+.confetti-12 { top: 72%; left: 96%; background: #df9a6d; transform: rotate(66deg); }
+
+.completion-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.completion-metrics article {
+  display: grid;
+  grid-template-columns: 39px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  min-height: 76px;
+  padding: 12px;
+  border: 1px solid rgba(137, 155, 143, 0.17);
+  border-radius: 15px;
+  background: rgba(255, 255, 255, 0.76);
+}
+
+.metric-icon {
+  display: grid;
+  width: 39px;
+  height: 39px;
+  place-items: center;
+  border-radius: 12px;
+  background: #e8f3eb;
+  color: #347d54;
+}
+
+.completion-metrics small { display: block; color: #8a958e; font-size: 8px; }
+.completion-metrics strong { display: block; margin-top: 4px; color: #334b3d; font-size: 11px; }
+
+.record-review {
+  display: grid;
+  gap: 15px;
+  margin-top: 14px;
+  padding: 21px;
+  border: 1px solid rgba(137, 155, 143, 0.17);
+  border-radius: 19px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.record-review-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.record-review-heading h3 {
+  margin: 7px 0 0;
+  color: #2e4236;
+  font-size: 18px;
+}
+
+.record-review-heading > span {
+  color: #87928b;
+  font-size: 8px;
+}
+
+.recorded-task-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.recorded-task-grid article {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) 20px;
+  align-items: center;
+  gap: 10px;
+  min-height: 70px;
+  padding: 11px;
+  border: 1px solid rgba(145, 162, 151, 0.18);
+  border-radius: 14px;
+  background: #f7f9f7;
+  color: #869089;
+}
+
+.recorded-task-grid article.done {
+  border-color: rgba(53, 137, 83, 0.23);
+  background: #edf6ef;
+  color: #2f7950;
+}
+
+.recorded-task-grid article > span {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border-radius: 12px;
+  background: #eef1ef;
+}
+
+.recorded-task-grid article.done > span {
+  background: white;
+}
+
+.recorded-task-grid strong { display: block; color: #4b5d52; font-size: 10px; }
+.recorded-task-grid article.done strong { color: #2f6245; }
+.recorded-task-grid small { display: block; margin-top: 4px; font-size: 8px; }
+
+.recorded-observations,
+.recorded-note,
+.honest-record {
+  display: grid;
+  gap: 11px;
+  padding-top: 15px;
+  border-top: 1px solid rgba(145, 162, 151, 0.16);
+}
+
+.record-subheading {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.record-subheading > span,
+.recorded-note > span,
+.honest-record > span {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border-radius: 11px;
+  background: #eaf3ec;
+  color: #397e55;
+}
+
+.record-subheading strong,
+.recorded-note strong,
+.honest-record strong { color: #384f41; font-size: 10px; }
+.record-subheading small { display: block; margin-top: 3px; color: #89938d; font-size: 8px; }
+
+.recorded-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.recorded-chips span {
+  display: inline-flex;
+  min-height: 31px;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: #edf6ef;
+  color: #396f50;
+  font-size: 8px;
+}
+
+.recorded-note,
+.honest-record {
+  grid-template-columns: 36px minmax(0, 1fr);
+  align-items: start;
+}
+
+.recorded-note p,
+.honest-record p {
+  margin: 5px 0 0;
+  color: #748078;
+  font-size: 9px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+
+.honest-record {
+  padding: 14px;
+  border-top: 0;
+  border-radius: 14px;
+  background: #f4f8f4;
+}
+
+.tomorrow-message {
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 13px;
+  margin-top: 14px;
+  padding: 16px;
+  border: 1px solid rgba(67, 144, 90, 0.2);
+  border-radius: 17px;
+  background: linear-gradient(110deg, #eaf5ed, #f8fcf8);
+}
+
+.tomorrow-icon {
+  display: grid;
+  width: 46px;
+  height: 46px;
+  place-items: center;
+  border-radius: 14px;
+  background: white;
+  color: #347d54;
+  box-shadow: 0 8px 17px rgba(48, 117, 76, 0.08);
+}
+
+.tomorrow-message strong { display: block; margin-top: 5px; color: #315b42; font-size: 11px; }
+.tomorrow-message p { margin: 5px 0 0; color: #728078; font-size: 8px; line-height: 1.55; }
+
+.tomorrow-day {
+  min-height: 31px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: #2f7a50;
+  color: white;
+  font-size: 8px;
+  font-weight: 700;
+  line-height: 31px;
+  white-space: nowrap;
 }
 
 .completion-badge {
@@ -1386,9 +1909,6 @@ function formatWeekday(value?: string) {
 
 .completion-badge strong { color: #2f6849; font-size: 25px; }
 .completion-badge span { color: #849087; font-size: 9px; }
-.completion-badge.done { border-color: #2f704d; background: #2f704d; }
-.completion-badge.done strong,
-.completion-badge.done span { color: white; }
 
 .completion-track {
   height: 7px;
@@ -1428,13 +1948,11 @@ function formatWeekday(value?: string) {
   transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
 }
 
-.check-item:hover:not(:disabled) {
+.check-item:hover {
   border-color: #8bb39a;
   box-shadow: 0 10px 24px rgba(51, 103, 73, 0.09);
   transform: translateY(-2px);
 }
-
-.check-item:disabled { cursor: default; }
 
 .task-icon {
   display: grid;
@@ -1539,8 +2057,6 @@ function formatWeekday(value?: string) {
   font-weight: 650;
 }
 
-.observation-chips button:disabled { cursor: default; }
-
 .textarea-wrap {
   position: relative;
 }
@@ -1563,11 +2079,6 @@ function formatWeekday(value?: string) {
 .textarea-wrap textarea:focus {
   border-color: #78a58a;
   box-shadow: 0 0 0 3px rgba(78, 137, 101, 0.1);
-}
-
-.textarea-wrap textarea:disabled {
-  background: #f4f6f3;
-  color: #657169;
 }
 
 .textarea-wrap > span {
@@ -1620,10 +2131,6 @@ function formatWeekday(value?: string) {
   cursor: not-allowed;
   opacity: 0.58;
   box-shadow: none;
-}
-
-.history-heading {
-  align-items: flex-end;
 }
 
 .history-list {
@@ -1915,7 +2422,7 @@ function formatWeekday(value?: string) {
 }
 
 .skeleton-overview span { height: 116px; }
-.skeleton-plan-grid span { height: 360px; }
+.skeleton-plan-grid span { height: 350px; }
 .skeleton-large { height: 420px; }
 
 .health-plan-note {
@@ -1948,12 +2455,6 @@ textarea:focus-visible {
   50% { transform: translateY(-8px); }
 }
 
-@keyframes glass-shine {
-  0%, 58% { left: -75%; opacity: 0; }
-  66% { opacity: 1; }
-  83%, 100% { left: 135%; opacity: 0; }
-}
-
 @keyframes orbit-one {
   0%, 100% { transform: translate(-50%, -50%) rotate(11deg); }
   50% { transform: translate(-50%, -54%) rotate(16deg); }
@@ -1971,12 +2472,32 @@ textarea:focus-visible {
 
 @keyframes sparkle {
   0%, 100% { opacity: 0.2; transform: scale(0.72) rotate(0deg); }
-  50% { opacity: 0.42; transform: scale(1) rotate(45deg); }
+  50% { opacity: 0.7; transform: scale(1) rotate(45deg); }
 }
 
 @keyframes grid-drift {
   from { background-position: 0 0, 0 0; }
   to { background-position: 22px 15px, 22px 15px; }
+}
+
+@keyframes celebration-orbit {
+  0%, 100% { transform: translate(-50%, -50%) rotate(10deg); }
+  50% { transform: translate(-50%, -54%) rotate(16deg); }
+}
+
+@keyframes celebration-orbit-alt {
+  0%, 100% { transform: translate(-50%, -50%) rotate(-16deg); }
+  50% { transform: translate(-50%, -46%) rotate(-22deg); }
+}
+
+@keyframes emblem-float {
+  0%, 100% { transform: translateX(-50%) translateY(0); }
+  50% { transform: translateX(-50%) translateY(-7px); }
+}
+
+@keyframes confetti-float {
+  0%, 100% { opacity: 0.25; transform: translateY(0) rotate(0deg); }
+  50% { opacity: 0.62; transform: translateY(-12px) rotate(110deg); }
 }
 
 @keyframes empty-orbit {
@@ -2011,6 +2532,14 @@ textarea:focus-visible {
   }
 
   .progress-link { grid-column: 1 / -1; justify-self: end; }
+
+  .completion-celebration {
+    grid-template-columns: minmax(0, 1fr) 220px;
+  }
+
+  .completion-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 
   .history-card {
     grid-template-columns: 78px 140px minmax(250px, 1fr);
@@ -2047,6 +2576,20 @@ textarea:focus-visible {
     min-height: auto;
   }
 
+  .completion-celebration {
+    grid-template-columns: 1fr;
+    min-height: auto;
+  }
+
+  .celebration-emblem {
+    position: absolute;
+    right: -24px;
+    bottom: -45px;
+    opacity: 0.28;
+    transform: scale(0.82);
+  }
+
+  .recorded-task-grid,
   .check-grid {
     grid-template-columns: 1fr;
   }
@@ -2089,9 +2632,22 @@ textarea:focus-visible {
   }
 
   .section-heading,
-  .checkin-heading {
+  .checkin-heading,
+  .record-review-heading {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .completion-celebration {
+    padding: 27px 23px;
+  }
+
+  .celebration-copy h2 {
+    font-size: clamp(29px, 8vw, 38px);
+  }
+
+  .completion-metrics {
+    grid-template-columns: 1fr;
   }
 
   .completion-badge {
@@ -2120,6 +2676,15 @@ textarea:focus-visible {
   .save-button,
   .close-plan-button {
     width: 100%;
+  }
+
+  .tomorrow-message {
+    grid-template-columns: 42px minmax(0, 1fr);
+  }
+
+  .tomorrow-day {
+    grid-column: 2;
+    justify-self: start;
   }
 
   .history-card {
@@ -2162,6 +2727,19 @@ textarea:focus-visible {
   }
 
   .care-card { padding: 17px; }
+
+  .celebration-actions {
+    flex-direction: column;
+  }
+
+  .celebration-primary,
+  .celebration-secondary {
+    width: 100%;
+  }
+
+  .record-review {
+    padding: 16px;
+  }
 
   .check-item {
     grid-template-columns: 42px minmax(0, 1fr) 27px;
@@ -2214,7 +2792,10 @@ textarea:focus-visible {
   .visual-dot,
   .care-spark,
   .care-stage,
-  .care-glass::after,
+  .emblem-ring,
+  .emblem-core,
+  .emblem-spark,
+  .celebration-confetti i,
   .empty-icon,
   .empty-orbit,
   .skeleton-overview span,
@@ -2229,7 +2810,9 @@ textarea:focus-visible {
   .care-card,
   .check-item,
   .history-card,
-  .progress-track i {
+  .progress-track i,
+  .celebration-primary,
+  .celebration-secondary {
     transition: none;
   }
 
@@ -2237,7 +2820,9 @@ textarea:focus-visible {
   .ghost-action:hover,
   .care-card:hover,
   .check-item:hover,
-  .history-card:hover {
+  .history-card:hover,
+  .celebration-primary:hover,
+  .celebration-secondary:hover {
     transform: none;
   }
 }
