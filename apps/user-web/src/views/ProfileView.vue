@@ -1,154 +1,230 @@
 <template>
   <section class="profile-page">
-    <header class="profile-head">
-      <div class="hero-avatar-wrap">
-        <div class="hero-avatar">
-          <img v-if="avatarSrc && !avatarLoadFailed" :src="avatarSrc" alt="用户头像" @error="avatarLoadFailed = true" />
-          <span v-else>{{ avatarText }}</span>
+    <header class="profile-hero">
+      <div class="hero-profile">
+        <div class="avatar-stage">
+          <span class="avatar-halo" />
+          <div class="hero-avatar">
+            <img v-if="avatarSrc && !avatarLoadFailed" :src="avatarSrc" alt="用户头像" @error="avatarLoadFailed = true" />
+            <span v-else>{{ avatarText }}</span>
+          </div>
+          <button class="avatar-camera" type="button" :disabled="avatarUploading" aria-label="更换头像" @click="openAvatarPicker">
+            <RefreshCw v-if="avatarUploading" class="spinning" :size="16" />
+            <Camera v-else :size="17" />
+          </button>
         </div>
-        <button class="avatar-camera" type="button" :disabled="avatarUploading" @click="openAvatarPicker">
-          <Camera :size="17" />
-        </button>
-      </div>
 
-      <div class="profile-copy">
-        <div class="name-row">
+        <div class="hero-copy">
+          <span class="page-kicker">PERSONAL HEALTH SPACE</span>
           <h1>{{ currentUser?.nickname || "我的健康空间" }}</h1>
-          <span class="space-badge">PERSONAL HEALTH SPACE</span>
-        </div>
-        <p>维护基础资料与健康关注方向，AI 将为您提供更贴合个人情况的舌象分析与健康建议。</p>
-        <div class="hero-tags">
-          <span v-for="item in selectedFocusItems.slice(0, 3)" :key="item.value">
-            <component :is="item.icon" :size="14" />
-            {{ item.label }}
-          </span>
-          <span v-if="selectedFocusItems.length === 0"><Sparkles :size="14" />等待设置健康关注方向</span>
+          <p>维护个人资料、健康关注方向和 AI 使用偏好，让每一次分析与建议更贴近您的真实情况。</p>
+
+          <div class="hero-tags">
+            <span v-for="item in selectedFocusItems.slice(0, 3)" :key="item.value">
+              <component :is="item.icon" :size="14" />
+              {{ item.label }}
+            </span>
+            <span v-if="selectedFocusItems.length === 0"><Sparkles :size="14" />等待设置健康关注方向</span>
+          </div>
         </div>
       </div>
 
-      <div class="completion-card">
-        <span class="completion-label">档案完整度</span>
-        <strong>{{ completion }}%</strong>
-        <div class="completion-track"><i :style="{ width: `${completion}%` }" /></div>
-        <div class="completion-todo">
-          <span>待完善：</span>
-          <em v-for="item in missingItems.slice(0, 3)" :key="item">{{ item }}</em>
-          <em v-if="missingItems.length === 0">基础档案已完善</em>
+      <div class="completion-visual">
+        <div class="completion-ring" :style="{ '--completion-angle': `${completion * 3.6}deg` }">
+          <span><strong>{{ completion }}</strong><small>%</small></span>
         </div>
-        <button v-if="missingItems.length" type="button" class="complete-button" @click="goCompleteProfile">继续完善</button>
+        <div class="completion-copy">
+          <span>档案完整度</span>
+          <strong>{{ completion >= 100 ? "基础档案已完善" : `还可完善 ${missingItems.length} 项` }}</strong>
+          <p>{{ missingItems.length ? `建议补充：${missingItems.slice(0, 3).join("、")}` : "AI 可以更稳定地使用您的个性化信息。" }}</p>
+          <button v-if="missingItems.length" type="button" @click="goCompleteProfile">
+            继续完善
+            <ArrowRight :size="15" />
+          </button>
+        </div>
+      </div>
+
+      <div class="hero-ambient" aria-hidden="true">
+        <span class="ambient-grid" />
+        <span class="ambient-orbit orbit-one" />
+        <span class="ambient-orbit orbit-two" />
+        <span class="ambient-dot dot-one" />
+        <span class="ambient-dot dot-two" />
       </div>
     </header>
 
-    <div class="profile-grid">
-      <section class="profile-panel">
-        <nav class="profile-tabs" aria-label="个人中心功能切换">
-          <button
-            v-for="tab in tabs"
-            :key="tab.value"
-            type="button"
-            :class="{ active: activeTab === tab.value }"
-            @click="activeTab = tab.value"
-          >
-            {{ tab.label }}
-          </button>
-        </nav>
+    <section class="profile-overview" aria-label="个人空间概览">
+      <article class="overview-card overview-completion">
+        <span class="overview-icon"><UserRoundCheck :size="21" /></span>
+        <span class="overview-copy">
+          <small>资料完整度</small>
+          <strong>{{ completion }}<em>%</em></strong>
+          <span>{{ missingItems.length ? `${missingItems.length} 项待完善` : "基础资料已完善" }}</span>
+        </span>
+      </article>
 
+      <article class="overview-card overview-focus">
+        <span class="overview-icon"><HeartPulse :size="21" /></span>
+        <span class="overview-copy">
+          <small>健康关注</small>
+          <strong>{{ selectedFocusItems.length }}<em>项</em></strong>
+          <span>{{ selectedFocusItems.length ? selectedFocusItems.map((item) => item.label).slice(0, 2).join("、") : "尚未设置关注方向" }}</span>
+        </span>
+      </article>
+
+      <article class="overview-card overview-health">
+        <span class="overview-icon"><Activity :size="21" /></span>
+        <span class="overview-copy">
+          <small>身体档案</small>
+          <strong class="overview-text-value">{{ bmiText }}</strong>
+          <span>{{ ageText }} · 睡眠 {{ form.sleepHours ? `${form.sleepHours} 小时` : "未填写" }}</span>
+        </span>
+      </article>
+
+      <article class="overview-card overview-ai">
+        <span class="overview-icon"><Brain :size="21" /></span>
+        <span class="overview-copy">
+          <small>AI 个性化</small>
+          <strong class="overview-text-value">{{ answerDetailText }}</strong>
+          <span>{{ form.useLongTermMemory ? "长期记忆已开启" : "长期记忆未开启" }}</span>
+        </span>
+      </article>
+    </section>
+
+    <section class="profile-workspace">
+      <nav class="profile-tabs" aria-label="个人中心功能切换">
+        <button
+          v-for="tab in tabs"
+          :key="tab.value"
+          type="button"
+          :class="{ active: activeTab === tab.value }"
+          @click="activeTab = tab.value"
+        >
+          <span><component :is="tab.icon" :size="17" /></span>
+          <div>
+            <strong>{{ tab.label }}</strong>
+            <small>{{ tab.description }}</small>
+          </div>
+          <ChevronRight :size="15" />
+        </button>
+      </nav>
+
+      <main class="profile-panel">
         <div v-if="activeTab === 'profile'" ref="profileFormRef" class="tab-content">
           <div class="panel-heading">
             <div>
               <span class="page-kicker">BASIC PROFILE</span>
               <h2>基础资料</h2>
+              <p>完善身份和联系方式，用于账号展示、报告署名与个性化分析。</p>
             </div>
-            <span class="save-status" :class="saveStatusClass">{{ saveStatusText }}</span>
+            <span :class="[ 'save-status', saveStatusClass ]"><i />{{ saveStatusText }}</span>
           </div>
 
-          <el-form class="profile-form" label-position="top">
-            <div class="form-grid avatar-form-grid">
-              <el-form-item label="头像">
-                <div class="avatar-field">
-                  <div class="form-avatar">
-                    <img v-if="avatarSrc && !avatarLoadFailed" :src="avatarSrc" alt="头像预览" @error="avatarLoadFailed = true" />
-                    <span v-else>{{ avatarText }}</span>
-                  </div>
-                  <div>
-                    <button class="secondary-button" type="button" :disabled="avatarUploading" @click="openAvatarPicker">
-                      {{ avatarUploading ? "正在上传" : "更换头像" }}
-                    </button>
-                    <p>支持 JPG / PNG / WEBP，2MB 以内</p>
-                  </div>
-                </div>
-              </el-form-item>
-
-              <el-form-item label="昵称" required>
-                <el-input v-model="form.nickname" size="large" maxlength="64" placeholder="请输入昵称" />
-                <span class="field-help">用于社区互动与报告署名</span>
-              </el-form-item>
-
-              <el-form-item label="性别" required>
-                <el-radio-group v-model="form.gender" class="gender-segment" size="large">
-                  <el-radio-button value="male">男</el-radio-button>
-                  <el-radio-button value="female">女</el-radio-button>
-                  <el-radio-button value="other">其他</el-radio-button>
-                </el-radio-group>
-              </el-form-item>
-
-              <el-form-item label="出生日期" required>
-                <el-date-picker
-                  v-model="form.birthDate"
-                  type="date"
-                  value-format="YYYY-MM-DD"
-                  format="YYYY-MM-DD"
-                  size="large"
-                  placeholder="请选择出生日期"
-                  :disabled-date="disableFutureDate"
-                />
-                <span class="field-help">用于个性化健康评估，仅自己可见</span>
-              </el-form-item>
-
-              <el-form-item label="手机号">
-                <div class="readonly-field">
-                  <Phone :size="16" />
-                  <span>{{ maskedPhone }}</span>
-                  <RouterLink to="/privacy">管理</RouterLink>
-                </div>
-                <span class="field-help">用于账号登录与重要通知</span>
-              </el-form-item>
-
-              <el-form-item label="邮箱（选填）">
-                <el-input v-model="form.email" size="large" maxlength="128" placeholder="请输入邮箱地址">
-                  <template #prefix><Mail :size="16" /></template>
-                </el-input>
-                <span class="field-help">用于接收报告与活动通知</span>
-              </el-form-item>
+          <section class="form-section avatar-section">
+            <div class="section-title">
+              <span><Camera :size="18" /></span>
+              <div><strong>头像与身份</strong><small>设置个人空间中的基础展示信息</small></div>
             </div>
 
-            <el-form-item label="健康关注方向（多选）">
-              <div class="focus-options">
-                <button
-                  v-for="item in focusOptions"
-                  :key="item.value"
-                  type="button"
-                  :class="{ selected: form.healthFocus.includes(item.value) }"
-                  @click="toggleFocus(item.value)"
-                >
-                  <component :is="item.icon" :size="15" />
-                  {{ item.label }}
-                  <Check v-if="form.healthFocus.includes(item.value)" :size="13" />
-                </button>
+            <div class="avatar-editor">
+              <div class="form-avatar">
+                <img v-if="avatarSrc && !avatarLoadFailed" :src="avatarSrc" alt="头像预览" @error="avatarLoadFailed = true" />
+                <span v-else>{{ avatarText }}</span>
               </div>
-            </el-form-item>
+              <div>
+                <strong>{{ currentUser?.nickname || "设置您的头像" }}</strong>
+                <p>支持 JPG、PNG、WEBP，文件不超过 2MB。</p>
+                <div class="avatar-actions">
+                  <button type="button" :disabled="avatarUploading" @click="openAvatarPicker">
+                    <Camera :size="15" />{{ avatarUploading ? "正在上传" : "更换头像" }}
+                  </button>
+                  <button v-if="avatarSrc" class="remove-avatar" type="button" @click="removeAvatar">
+                    <Trash2 :size="15" />删除头像
+                  </button>
+                </div>
+              </div>
+            </div>
+          </section>
 
-            <el-form-item label="补充说明（选填）">
-              <el-input
-                v-model="form.profileNote"
-                type="textarea"
-                :rows="4"
-                maxlength="500"
-                show-word-limit
-                placeholder="例如：希望关注舌苔变化、饮食建议、作息和长期趋势等"
-              />
-            </el-form-item>
-          </el-form>
+          <section class="form-section">
+            <div class="section-title">
+              <span><UserRoundCheck :size="18" /></span>
+              <div><strong>个人信息</strong><small>带 * 的字段建议优先完善</small></div>
+            </div>
+
+            <el-form class="profile-form" label-position="top">
+              <div class="form-grid">
+                <el-form-item label="昵称 *">
+                  <el-input v-model="form.nickname" size="large" maxlength="64" placeholder="请输入昵称" />
+                  <span class="field-help">用于个人空间展示和报告署名</span>
+                </el-form-item>
+
+                <el-form-item label="性别 *">
+                  <el-radio-group v-model="form.gender" class="gender-segment" size="large">
+                    <el-radio-button value="male">男</el-radio-button>
+                    <el-radio-button value="female">女</el-radio-button>
+                    <el-radio-button value="other">其他</el-radio-button>
+                  </el-radio-group>
+                </el-form-item>
+
+                <el-form-item label="出生日期 *">
+                  <el-date-picker
+                    v-model="form.birthDate"
+                    type="date"
+                    value-format="YYYY-MM-DD"
+                    format="YYYY-MM-DD"
+                    size="large"
+                    placeholder="请选择出生日期"
+                    :disabled-date="disableFutureDate"
+                  />
+                  <span class="field-help">仅用于个性化健康参考</span>
+                </el-form-item>
+
+                <el-form-item label="手机号">
+                  <div class="readonly-field">
+                    <Phone :size="16" />
+                    <span>{{ maskedPhone }}</span>
+                    <RouterLink to="/privacy">管理</RouterLink>
+                  </div>
+                  <span class="field-help">用于登录和重要通知</span>
+                </el-form-item>
+
+                <el-form-item label="邮箱（选填）">
+                  <el-input v-model="form.email" size="large" maxlength="128" placeholder="请输入邮箱地址">
+                    <template #prefix><Mail :size="16" /></template>
+                  </el-input>
+                  <span class="field-help">可用于接收报告和提醒</span>
+                </el-form-item>
+              </div>
+            </el-form>
+          </section>
+
+          <section class="form-section">
+            <div class="section-title">
+              <span><HeartPulse :size="18" /></span>
+              <div><strong>健康关注方向</strong><small>可多选，助手会在回答时优先关注这些方面</small></div>
+            </div>
+
+            <div class="focus-options">
+              <button
+                v-for="item in focusOptions"
+                :key="item.value"
+                type="button"
+                :class="{ selected: form.healthFocus.includes(item.value) }"
+                @click="toggleFocus(item.value)"
+              >
+                <span><component :is="item.icon" :size="17" /></span>
+                <div><strong>{{ item.label }}</strong><small>{{ item.description }}</small></div>
+                <Check v-if="form.healthFocus.includes(item.value)" :size="14" />
+              </button>
+            </div>
+
+            <label class="textarea-field">
+              <span>补充说明（选填）</span>
+              <textarea v-model="form.profileNote" maxlength="500" placeholder="例如：希望持续关注舌苔变化、饮食建议、作息和长期趋势等。" />
+              <small>{{ form.profileNote.length }}/500</small>
+            </label>
+          </section>
         </div>
 
         <div v-else-if="activeTab === 'health'" class="tab-content">
@@ -156,41 +232,62 @@
             <div>
               <span class="page-kicker">HEALTH PROFILE</span>
               <h2>健康档案</h2>
+              <p>以下内容均为选填，仅用于生成更贴近个人情况的生活方式建议。</p>
             </div>
-            <span class="save-status" :class="saveStatusClass">{{ saveStatusText }}</span>
+            <span :class="[ 'save-status', saveStatusClass ]"><i />{{ saveStatusText }}</span>
           </div>
-          <p class="section-intro">以下信息均为选填，只用于生成更贴近个人情况的健康管理建议，不用于独立诊断。</p>
-          <el-form class="profile-form" label-position="top">
-            <div class="form-grid">
-              <el-form-item label="身高（cm）">
-                <el-input-number v-model="form.heightCm" :min="50" :max="250" :precision="1" size="large" />
-              </el-form-item>
-              <el-form-item label="体重（kg）">
-                <el-input-number v-model="form.weightKg" :min="10" :max="350" :precision="1" size="large" />
-              </el-form-item>
-              <el-form-item label="平均睡眠时长（小时）">
-                <el-input-number v-model="form.sleepHours" :min="0" :max="24" :step="0.5" :precision="1" size="large" />
-              </el-form-item>
-              <el-form-item label="每周运动频率">
-                <el-select v-model="form.exerciseFrequency" size="large" clearable placeholder="请选择">
-                  <el-option label="基本不运动" value="NONE" />
-                  <el-option label="每周 1-2 次" value="LOW" />
-                  <el-option label="每周 3-4 次" value="MEDIUM" />
-                  <el-option label="每周 5 次及以上" value="HIGH" />
-                </el-select>
-              </el-form-item>
+
+          <section class="health-summary-card">
+            <span class="health-summary-icon"><Activity :size="23" /></span>
+            <div>
+              <span class="page-kicker">PROFILE SUMMARY</span>
+              <strong>{{ bmiText }}</strong>
+              <p>{{ ageText }}，平均睡眠 {{ form.sleepHours ? `${form.sleepHours} 小时` : "尚未填写" }}，运动频率为 {{ exerciseFrequencyText }}。</p>
             </div>
-            <el-form-item label="饮食偏好、忌口或过敏情况（选填）">
-              <el-input
-                v-model="form.dietaryPreference"
-                type="textarea"
-                :rows="5"
-                maxlength="500"
-                show-word-limit
-                placeholder="例如：偏清淡、乳糖不耐受、海鲜过敏、正在控制晚餐摄入等"
-              />
-            </el-form-item>
-          </el-form>
+            <small>仅作档案摘要</small>
+          </section>
+
+          <section class="form-section">
+            <div class="section-title">
+              <span><Activity :size="18" /></span>
+              <div><strong>身体与生活方式</strong><small>用于调整建议的强度、频率和表达边界</small></div>
+            </div>
+
+            <el-form class="profile-form" label-position="top">
+              <div class="form-grid">
+                <el-form-item label="身高（cm）">
+                  <el-input-number v-model="form.heightCm" :min="50" :max="250" :precision="1" size="large" />
+                </el-form-item>
+                <el-form-item label="体重（kg）">
+                  <el-input-number v-model="form.weightKg" :min="10" :max="350" :precision="1" size="large" />
+                </el-form-item>
+                <el-form-item label="平均睡眠时长（小时）">
+                  <el-input-number v-model="form.sleepHours" :min="0" :max="24" :step="0.5" :precision="1" size="large" />
+                </el-form-item>
+                <el-form-item label="每周运动频率">
+                  <el-select v-model="form.exerciseFrequency" size="large" clearable placeholder="请选择运动频率">
+                    <el-option label="基本不运动" value="NONE" />
+                    <el-option label="每周 1-2 次" value="LOW" />
+                    <el-option label="每周 3-4 次" value="MEDIUM" />
+                    <el-option label="每周 5 次及以上" value="HIGH" />
+                  </el-select>
+                </el-form-item>
+              </div>
+            </el-form>
+          </section>
+
+          <section class="form-section">
+            <div class="section-title">
+              <span><Utensils :size="18" /></span>
+              <div><strong>饮食偏好与限制</strong><small>填写忌口、过敏或正在执行的饮食安排</small></div>
+            </div>
+
+            <label class="textarea-field">
+              <span>饮食偏好、忌口或过敏情况</span>
+              <textarea v-model="form.dietaryPreference" maxlength="500" placeholder="例如：偏清淡、乳糖不耐受、海鲜过敏、正在控制晚餐摄入等。" />
+              <small>{{ form.dietaryPreference.length }}/500</small>
+            </label>
+          </section>
         </div>
 
         <div v-else-if="activeTab === 'ai'" class="tab-content">
@@ -198,14 +295,15 @@
             <div>
               <span class="page-kicker">AI PERSONALIZATION</span>
               <h2>AI 个性化设置</h2>
+              <p>控制助手回答深度、可用信息范围和健康提醒方式。</p>
             </div>
-            <span class="save-status" :class="saveStatusClass">{{ saveStatusText }}</span>
+            <span :class="[ 'save-status', saveStatusClass ]"><i />{{ saveStatusText }}</span>
           </div>
 
-          <section class="setting-block">
+          <section class="detail-level-card">
             <div>
-              <strong>回答详细程度</strong>
-              <p>控制助手默认回答的篇幅和解释深度。</p>
+              <span class="detail-icon"><MessagesSquare :size="21" /></span>
+              <div><strong>回答详细程度</strong><p>选择助手默认回答的篇幅与解释深度。</p></div>
             </div>
             <el-radio-group v-model="form.answerDetailLevel" class="detail-level">
               <el-radio-button value="CONCISE">简洁</el-radio-button>
@@ -216,54 +314,57 @@
 
           <section class="setting-list">
             <label>
-              <span class="setting-icon"><HeartPulse :size="19" /></span>
-              <span><strong>结合健康档案</strong><small>回答时按需使用已填写的基础健康信息</small></span>
+              <span class="setting-icon"><HeartPulse :size="20" /></span>
+              <span><strong>结合健康档案</strong><small>回答时按需使用您主动填写的基础健康信息</small></span>
               <el-switch v-model="form.useHealthProfile" />
             </label>
             <label>
-              <span class="setting-icon"><History :size="19" /></span>
+              <span class="setting-icon"><History :size="20" /></span>
               <span><strong>引用历史报告</strong><small>进行趋势分析或报告追问时读取历史报告</small></span>
               <el-switch v-model="form.useHistoryReports" />
             </label>
             <label>
-              <span class="setting-icon"><Brain :size="19" /></span>
-              <span><strong>允许长期记忆</strong><small>保存稳定偏好，后续可在隐私中心查看与清除</small></span>
+              <span class="setting-icon"><Brain :size="20" /></span>
+              <span><strong>允许长期记忆</strong><small>保存稳定偏好，可随时在隐私中心清除</small></span>
               <el-switch v-model="form.useLongTermMemory" />
             </label>
           </section>
 
-          <div class="reminder-settings">
-            <section>
-              <div>
-                <strong>舌象复拍提醒</strong>
-                <p>在相近光线和时间下复拍，便于观察趋势。</p>
-              </div>
-              <el-switch v-model="form.tongueReminderEnabled" />
-              <el-time-select
-                v-model="form.tongueReminderTime"
-                start="06:00"
-                step="00:30"
-                end="23:30"
-                :disabled="!form.tongueReminderEnabled"
-                placeholder="提醒时间"
-              />
-            </section>
-            <section>
-              <div>
-                <strong>睡眠记录提醒</strong>
-                <p>记录入睡、夜醒和起床后的精神状态。</p>
-              </div>
-              <el-switch v-model="form.sleepReminderEnabled" />
-              <el-time-select
-                v-model="form.sleepReminderTime"
-                start="18:00"
-                step="00:30"
-                end="23:30"
-                :disabled="!form.sleepReminderEnabled"
-                placeholder="提醒时间"
-              />
-            </section>
-          </div>
+          <section class="reminder-section">
+            <div class="section-title">
+              <span><Clock3 :size="18" /></span>
+              <div><strong>健康提醒</strong><small>在适合的时间提示复拍和睡眠记录</small></div>
+            </div>
+
+            <div class="reminder-settings">
+              <section>
+                <span class="reminder-icon"><Camera :size="20" /></span>
+                <div><strong>舌象复拍提醒</strong><p>保持相近光线和时间，便于观察趋势。</p></div>
+                <el-switch v-model="form.tongueReminderEnabled" />
+                <el-time-select
+                  v-model="form.tongueReminderTime"
+                  start="06:00"
+                  step="00:30"
+                  end="23:30"
+                  :disabled="!form.tongueReminderEnabled"
+                  placeholder="提醒时间"
+                />
+              </section>
+              <section>
+                <span class="reminder-icon"><Moon :size="20" /></span>
+                <div><strong>睡眠记录提醒</strong><p>记录入睡、夜醒和起床后的精神状态。</p></div>
+                <el-switch v-model="form.sleepReminderEnabled" />
+                <el-time-select
+                  v-model="form.sleepReminderTime"
+                  start="18:00"
+                  step="00:30"
+                  end="23:30"
+                  :disabled="!form.sleepReminderEnabled"
+                  placeholder="提醒时间"
+                />
+              </section>
+            </div>
+          </section>
         </div>
 
         <div v-else class="tab-content privacy-tab">
@@ -271,95 +372,123 @@
             <div>
               <span class="page-kicker">PRIVACY & SECURITY</span>
               <h2>隐私与安全</h2>
+              <p>集中管理健康数据、聊天记录、长期记忆和账号隐私操作。</p>
             </div>
           </div>
-          <RouterLink class="privacy-action-card" to="/privacy">
-            <span><ShieldCheck :size="22" /></span>
-            <div>
-              <strong>进入隐私与数据管理</strong>
-              <p>管理报告、聊天记录、长期记忆、数据导出与账号注销。</p>
-            </div>
-            <ChevronRight :size="18" />
-          </RouterLink>
-          <button v-if="avatarSrc" class="privacy-action-card danger" type="button" @click="removeAvatar">
-            <span><Trash2 :size="22" /></span>
-            <div>
-              <strong>删除当前头像</strong>
-              <p>删除服务器本地保存的头像文件并恢复默认头像。</p>
-            </div>
-            <ChevronRight :size="18" />
-          </button>
+
+          <div class="privacy-grid">
+            <RouterLink class="privacy-action-card" to="/privacy">
+              <span><ShieldCheck :size="23" /></span>
+              <div><strong>进入隐私与数据管理</strong><p>管理报告、聊天记录、长期记忆、数据导出和账号注销。</p></div>
+              <ChevronRight :size="18" />
+            </RouterLink>
+
+            <RouterLink class="privacy-action-card" to="/reports">
+              <span><FileText :size="23" /></span>
+              <div><strong>管理健康报告</strong><p>查看、删除或进入历次舌象分析报告。</p></div>
+              <ChevronRight :size="18" />
+            </RouterLink>
+
+            <button v-if="avatarSrc" class="privacy-action-card danger" type="button" @click="removeAvatar">
+              <span><Trash2 :size="23" /></span>
+              <div><strong>删除当前头像</strong><p>移除服务器保存的头像文件并恢复默认头像。</p></div>
+              <ChevronRight :size="18" />
+            </button>
+          </div>
+
+          <section class="privacy-note">
+            <span><ShieldCheck :size="21" /></span>
+            <div><strong>您的健康数据由您决定</strong><p>您可以在隐私中心导出或删除数据，并控制助手是否使用健康档案、历史报告和长期记忆。</p></div>
+          </section>
         </div>
 
         <footer v-if="activeTab !== 'privacy'" class="profile-actions">
-          <button class="cancel-button" type="button" :disabled="saving || !dirty" @click="resetForm">取消修改</button>
-          <button class="save-button" type="button" :disabled="saving || !dirty" @click="save">
-            <Save :size="17" />
-            {{ saving ? "正在保存" : "保存个人资料" }}
-          </button>
+          <div class="action-tip">
+            <ShieldCheck :size="16" />
+            <span>只有点击保存后，本页修改才会应用到后续分析与回答。</span>
+          </div>
+          <div>
+            <button class="cancel-button" type="button" :disabled="saving || !dirty" @click="resetForm">取消修改</button>
+            <button class="save-button" type="button" :disabled="saving || !dirty" @click="save">
+              <RefreshCw v-if="saving" class="spinning" :size="17" />
+              <Save v-else :size="17" />
+              {{ saving ? "正在保存" : "保存个人资料" }}
+            </button>
+          </div>
         </footer>
-      </section>
+      </main>
 
       <aside class="profile-side">
-        <section class="preference-card">
-          <h2>完善资料后可以获得</h2>
+        <section class="side-card benefit-card">
+          <div class="side-heading">
+            <span class="side-icon"><Sparkles :size="20" /></span>
+            <div><span class="page-kicker">PERSONALIZATION</span><h3>完善资料后可以获得</h3></div>
+          </div>
           <ul>
             <li>
-              <span><UserRoundCheck :size="19" /></span>
-              <div><strong>更精准的舌象分析</strong><p>信息越完善，AI 越能说明结论边界。</p></div>
+              <span><UserRoundCheck :size="18" /></span>
+              <div><strong>更贴近个人情况的解释</strong><p>帮助助手明确适用范围与表达边界。</p></div>
             </li>
             <li>
-              <span><MessagesSquare :size="19" /></span>
-              <div><strong>个性化健康建议</strong><p>结合关注方向与习惯给出可执行方案。</p></div>
+              <span><MessagesSquare :size="18" /></span>
+              <div><strong>更可执行的健康建议</strong><p>结合关注方向和生活习惯安排建议。</p></div>
             </li>
             <li>
-              <span><ChartNoAxesCombined :size="19" /></span>
-              <div><strong>长期趋势追踪</strong><p>更清晰地回顾舌象和健康状态变化。</p></div>
+              <span><ChartNoAxesCombined :size="18" /></span>
+              <div><strong>更连续的长期观察</strong><p>回顾舌象、报告和日常计划的变化。</p></div>
             </li>
           </ul>
         </section>
 
         <section class="side-card recent-report-card">
           <div class="side-card-title">
-            <h3>最近报告</h3>
+            <div><span class="page-kicker">LATEST REPORT</span><h3>最近报告</h3></div>
             <span v-if="latestReport">{{ latestReport.analysisQualityLevel || "已生成" }}</span>
           </div>
+
           <template v-if="latestReport">
             <div class="report-preview">
-              <span class="report-icon"><FileText :size="24" /></span>
+              <span class="report-icon"><FileText :size="23" /></span>
               <div>
-                <strong>舌象健康报告</strong>
+                <strong>舌象健康报告 #{{ latestReport.reportId }}</strong>
                 <time>{{ formatDate(latestReport.createdAt) }}</time>
-                <p>{{ latestReport.featureSummary || "查看本次舌象特征与健康管理建议。" }}</p>
+                <p>{{ latestReport.featureSummary || "查看本次舌象特征和健康管理建议。" }}</p>
               </div>
             </div>
-            <button type="button" class="outline-button" @click="openLatestReport">查看报告</button>
+            <button type="button" class="outline-button" @click="openLatestReport">
+              查看完整报告
+              <ArrowRight :size="15" />
+            </button>
           </template>
-          <div v-else class="empty-side-state">完成一次舌象检测后，最近报告会显示在这里。</div>
+
+          <div v-else class="empty-side-state">
+            <span><FileText :size="24" /></span>
+            <div><strong>暂无健康报告</strong><p>完成一次舌象分析后，最近报告会显示在这里。</p></div>
+          </div>
         </section>
 
         <section class="side-card reminder-card">
-          <h3>下次提醒</h3>
+          <div class="side-card-title">
+            <div><span class="page-kicker">REMINDERS</span><h3>健康提醒</h3></div>
+          </div>
           <div class="reminder-row">
             <span><Camera :size="17" /></span>
-            <div><strong>舌象复拍提醒</strong><small>{{ form.tongueReminderEnabled ? form.tongueReminderTime : "未开启" }}</small></div>
+            <div><strong>舌象复拍</strong><small>{{ form.tongueReminderEnabled ? form.tongueReminderTime : "未开启" }}</small></div>
           </div>
           <div class="reminder-row">
             <span><Moon :size="17" /></span>
-            <div><strong>睡眠记录提醒</strong><small>{{ form.sleepReminderEnabled ? form.sleepReminderTime : "未开启" }}</small></div>
+            <div><strong>睡眠记录</strong><small>{{ form.sleepReminderEnabled ? form.sleepReminderTime : "未开启" }}</small></div>
           </div>
+          <button type="button" @click="activeTab = 'ai'">管理提醒设置</button>
         </section>
 
         <RouterLink class="privacy-entry" to="/privacy">
           <span class="privacy-icon"><ShieldCheck :size="20" /></span>
-          <div>
-            <strong>隐私与数据管理</strong>
-            <p>管理您的数据、权限与导出。</p>
-          </div>
+          <div><strong>隐私与数据管理</strong><p>管理数据、权限、导出与账号操作。</p></div>
           <ChevronRight :size="18" />
         </RouterLink>
       </aside>
-    </div>
+    </section>
 
     <input
       ref="avatarInputRef"
@@ -368,6 +497,11 @@
       accept="image/jpeg,image/png,image/webp"
       @change="onAvatarChange"
     />
+
+    <footer class="profile-note">
+      <ShieldCheck :size="15" />
+      <span>个人资料仅用于账号服务和您授权的个性化健康功能，不作为独立诊断依据。</span>
+    </footer>
   </section>
 </template>
 
@@ -377,11 +511,13 @@ import { useRouter } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
 import {
   Activity,
+  ArrowRight,
   Brain,
   Camera,
   ChartNoAxesCombined,
   Check,
   ChevronRight,
+  Clock3,
   Dumbbell,
   FileText,
   HeartPulse,
@@ -390,6 +526,7 @@ import {
   MessagesSquare,
   Moon,
   Phone,
+  RefreshCw,
   Save,
   Shield,
   ShieldCheck,
@@ -441,20 +578,20 @@ const profileFormRef = ref<HTMLElement | null>(null);
 const latestReport = ref<ReportListItem | null>(null);
 const initialSnapshot = ref("");
 
-const tabs: Array<{ value: TabValue; label: string }> = [
-  { value: "profile", label: "个人资料" },
-  { value: "health", label: "健康档案" },
-  { value: "ai", label: "AI 个性化设置" },
-  { value: "privacy", label: "隐私与安全" },
+const tabs = [
+  { value: "profile" as const, label: "个人资料", description: "身份与关注方向", icon: UserRoundCheck },
+  { value: "health" as const, label: "健康档案", description: "身体与生活方式", icon: HeartPulse },
+  { value: "ai" as const, label: "AI 个性化", description: "回答与提醒设置", icon: Brain },
+  { value: "privacy" as const, label: "隐私与安全", description: "数据和账号管理", icon: ShieldCheck },
 ];
 
 const focusOptions = [
-  { value: "SLEEP", label: "睡眠改善", icon: Moon },
-  { value: "DIET", label: "饮食管理", icon: Utensils },
-  { value: "MOOD", label: "情绪压力", icon: Smile },
-  { value: "DIGESTION", label: "消化健康", icon: Activity },
-  { value: "IMMUNITY", label: "免疫提升", icon: Shield },
-  { value: "FITNESS", label: "运动健身", icon: Dumbbell },
+  { value: "SLEEP", label: "睡眠改善", description: "作息、夜醒与恢复", icon: Moon },
+  { value: "DIET", label: "饮食管理", description: "饮食结构与执行建议", icon: Utensils },
+  { value: "MOOD", label: "情绪压力", description: "压力、情绪和身心状态", icon: Smile },
+  { value: "DIGESTION", label: "消化健康", description: "食欲、腹胀与消化感受", icon: Activity },
+  { value: "IMMUNITY", label: "免疫提升", description: "日常恢复与健康防护", icon: Shield },
+  { value: "FITNESS", label: "运动健身", description: "活动强度和持续计划", icon: Dumbbell },
 ];
 
 const form = reactive({
@@ -516,6 +653,34 @@ const saveStatusClass = computed(() => ({
   active: savedRecently.value || (!dirty.value && !saving.value),
   warning: dirty.value && !saving.value,
 }));
+const answerDetailText = computed(() => ({
+  CONCISE: "简洁回答",
+  STANDARD: "标准回答",
+  DETAILED: "详细回答",
+}[form.answerDetailLevel] || "标准回答"));
+const exerciseFrequencyText = computed(() => ({
+  NONE: "基本不运动",
+  LOW: "每周 1-2 次",
+  MEDIUM: "每周 3-4 次",
+  HIGH: "每周 5 次及以上",
+}[form.exerciseFrequency] || "尚未填写"));
+const ageText = computed(() => {
+  if (!form.birthDate) return "年龄未填写";
+  const birth = new Date(`${form.birthDate}T00:00:00`);
+  if (Number.isNaN(birth.getTime())) return "年龄未知";
+  const today = new Date();
+  let age = today.getFullYear() - birth.getFullYear();
+  const beforeBirthday = today.getMonth() < birth.getMonth()
+    || (today.getMonth() === birth.getMonth() && today.getDate() < birth.getDate());
+  if (beforeBirthday) age -= 1;
+  return age >= 0 ? `${age} 岁` : "年龄未知";
+});
+const bmiText = computed(() => {
+  if (!form.heightCm || !form.weightKg) return "BMI 未填写";
+  const height = form.heightCm / 100;
+  if (!height) return "BMI 未填写";
+  return `BMI ${(form.weightKg / (height * height)).toFixed(1)}`;
+});
 
 watch(
   () => auth.user,
@@ -527,7 +692,8 @@ watch(avatarSrc, () => { avatarLoadFailed.value = false; });
 onMounted(async () => {
   try {
     const reports = await tongueApi.reports();
-    latestReport.value = [...reports].sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")))[0] || null;
+    latestReport.value = [...reports]
+      .sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")))[0] || null;
   } catch (error) {
     console.warn("load latest report failed", error);
   }
@@ -718,239 +884,869 @@ function formatDate(value?: string) {
 
 <style scoped>
 .profile-page {
+  --profile-ink: #182820;
+  --profile-muted: #79857d;
+  --profile-line: rgba(137, 155, 143, 0.22);
+  --profile-green: #268b58;
   display: grid;
-  gap: 20px;
-  width: min(1290px, 100%);
+  gap: 18px;
+  width: min(1220px, 100%);
   margin: 0 auto;
+  padding-bottom: 8px;
   color: #243129;
 }
 
-.profile-head,
-.profile-panel,
-.preference-card,
-.side-card,
-.privacy-entry {
-  border: 1px solid rgba(168, 184, 173, 0.46);
-  background: rgba(255, 255, 252, 0.92);
-  box-shadow: 0 18px 48px rgba(45, 68, 54, 0.07);
-}
-
-.profile-head {
+.profile-hero {
+  position: relative;
   display: grid;
-  grid-template-columns: 150px minmax(0, 1fr) minmax(300px, 360px);
+  grid-template-columns: minmax(0, 1.25fr) minmax(300px, 0.75fr);
   align-items: center;
-  gap: 26px;
-  min-height: 210px;
-  padding: 28px 32px;
+  min-height: 265px;
+  overflow: hidden;
+  padding: 37px 42px;
+  border: 1px solid var(--profile-line);
   border-radius: 28px;
   background:
-    radial-gradient(circle at 100% 0, rgba(211, 230, 217, 0.78), transparent 42%),
-    rgba(255, 255, 252, 0.94);
+    radial-gradient(circle at 84% 28%, rgba(179, 226, 191, 0.31), transparent 29%),
+    radial-gradient(circle at 97% 95%, rgba(211, 237, 212, 0.72), transparent 34%),
+    linear-gradient(96deg, #fffefa 0%, #fcfdfb 56%, #eef8ef 100%);
+  box-shadow: 0 22px 52px rgba(37, 71, 49, 0.07);
+  animation: reveal-up 520ms ease-out both;
 }
 
-.hero-avatar-wrap {
+.hero-profile {
+  position: relative;
+  z-index: 3;
+  display: grid;
+  grid-template-columns: 126px minmax(0, 1fr);
+  align-items: center;
+  gap: 25px;
+}
+
+.avatar-stage {
   position: relative;
   width: 126px;
   height: 126px;
 }
 
+.avatar-halo {
+  position: absolute;
+  inset: 7px;
+  border-radius: 50%;
+  background: rgba(66, 177, 103, 0.22);
+  filter: blur(20px);
+}
+
 .hero-avatar,
 .form-avatar {
+  position: relative;
+  z-index: 2;
   display: grid;
   overflow: hidden;
   place-items: center;
-  border: 5px solid rgba(255, 255, 255, 0.9);
-  border-radius: 50%;
-  background: linear-gradient(145deg, #e5f0e8, #bdd8c7);
-  color: #2b6747;
-  box-shadow: 0 10px 28px rgba(46, 91, 62, 0.15);
+  border: 1px solid rgba(63, 139, 87, 0.2);
+  border-radius: 35%;
+  background: linear-gradient(155deg, #4aa36d, #27764f);
+  color: white;
+  font-family: "Noto Serif SC", "Source Han Serif SC", serif;
+  box-shadow: 0 15px 30px rgba(39, 118, 79, 0.21);
 }
 
-.hero-avatar { width: 126px; height: 126px; font-size: 42px; }
+.hero-avatar {
+  width: 116px;
+  height: 116px;
+  margin: 5px;
+  font-size: 42px;
+}
+
 .hero-avatar img,
-.form-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.form-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
 
 .avatar-camera {
   position: absolute;
-  right: -2px;
-  bottom: 7px;
+  right: 0;
+  bottom: 0;
+  z-index: 4;
   display: grid;
-  width: 42px;
-  height: 42px;
+  width: 40px;
+  height: 40px;
   place-items: center;
-  border: 1px solid #d8e3db;
+  border: 4px solid #f7fbf7;
   border-radius: 50%;
-  background: #fff;
-  color: #276945;
+  background: #fffefa;
+  color: #2d7850;
+  box-shadow: 0 8px 18px rgba(42, 105, 69, 0.17);
   cursor: pointer;
-  box-shadow: 0 7px 18px rgba(40, 82, 55, 0.14);
 }
 
-.name-row { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; }
-.profile-copy h1 {
-  margin: 0;
-  color: #1f2923;
-  font-family: "Noto Serif SC", "Source Han Serif SC", serif;
-  font-size: clamp(38px, 4.2vw, 58px);
-  font-weight: 560;
-  letter-spacing: -0.055em;
-}
-.space-badge {
-  padding: 7px 11px;
-  border-radius: 9px;
-  background: #edf5ee;
-  color: #397153;
-  font-size: 10px;
-  letter-spacing: 0.05em;
-}
-.profile-copy > p { max-width: 680px; margin: 14px 0 0; color: #6f7b73; font-size: 13px; line-height: 1.75; }
-.hero-tags { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
-.hero-tags span { display: inline-flex; align-items: center; gap: 7px; padding: 9px 14px; border-radius: 999px; background: #eff6ef; color: #397253; font-size: 12px; }
+.avatar-camera:disabled { cursor: wait; opacity: 0.65; }
 
-.completion-card {
+.page-kicker {
+  display: block;
+  color: #43805f;
+  font-size: 9px;
+  font-weight: 760;
+  letter-spacing: 0.18em;
+}
+
+.hero-copy h1 {
+  margin: 10px 0 0;
+  color: var(--profile-ink);
+  font-family: "Noto Serif SC", "Source Han Serif SC", "Songti SC", serif;
+  font-size: clamp(37px, 4vw, 52px);
+  font-weight: 520;
+  line-height: 1.18;
+  letter-spacing: -0.05em;
+}
+
+.hero-copy p {
+  max-width: 650px;
+  margin: 14px 0 0;
+  color: var(--profile-muted);
+  font-size: 12px;
+  line-height: 1.75;
+}
+
+.hero-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.hero-tags span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 29px;
+  padding: 0 9px;
+  border: 1px solid rgba(70, 120, 87, 0.13);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.66);
+  color: #5e7165;
+  font-size: 8px;
+}
+
+.completion-visual {
+  position: relative;
+  z-index: 3;
+  display: grid;
+  grid-template-columns: 102px minmax(0, 1fr);
+  align-items: center;
+  gap: 17px;
+  padding: 19px;
+  border: 1px solid rgba(72, 141, 94, 0.17);
+  border-radius: 21px;
+  background: rgba(255, 255, 255, 0.7);
+  box-shadow: 0 13px 28px rgba(42, 86, 55, 0.06);
+  backdrop-filter: blur(8px);
+}
+
+.completion-ring {
+  --completion-angle: 0deg;
+  display: grid;
+  width: 98px;
+  height: 98px;
+  place-items: center;
+  border-radius: 50%;
+  background: conic-gradient(#348b5a var(--completion-angle), #e3ebe5 0deg);
+  box-shadow: 0 10px 20px rgba(49, 127, 82, 0.1);
+}
+
+.completion-ring > span {
+  display: flex;
+  width: 76px;
+  height: 76px;
+  align-items: baseline;
+  justify-content: center;
+  place-items: center;
+  border-radius: 50%;
+  background: #fffefa;
+}
+
+.completion-ring strong { color: #2f754d; font-size: 26px; }
+.completion-ring small { margin-left: 2px; color: #7f8c84; font-size: 9px; }
+
+.completion-copy > span { color: #7c8880; font-size: 8px; }
+.completion-copy > strong { display: block; margin-top: 5px; color: #334a3c; font-size: 12px; }
+.completion-copy p { margin: 6px 0 0; color: #7d8981; font-size: 8px; line-height: 1.6; }
+.completion-copy button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 31px;
+  margin-top: 11px;
+  padding: 0 10px;
+  border: 1px solid #2d7850;
+  border-radius: 10px;
+  background: #2d7850;
+  color: white;
+  cursor: pointer;
+  font-size: 8px;
+  font-weight: 680;
+}
+
+.hero-ambient {
+  position: absolute;
+  inset: 0 0 0 55%;
+  pointer-events: none;
+}
+
+.ambient-grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(56, 133, 82, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(56, 133, 82, 0.04) 1px, transparent 1px);
+  background-size: 42px 42px;
+  mask-image: linear-gradient(90deg, transparent, black 24%);
+  animation: grid-drift 18s linear infinite alternate;
+}
+
+.ambient-orbit {
+  position: absolute;
+  top: 50%;
+  left: 57%;
+  border: 1px dashed rgba(53, 142, 84, 0.18);
+  border-radius: 50%;
+}
+
+.orbit-one { width: 310px; height: 130px; animation: orbit-one 9s ease-in-out infinite; }
+.orbit-two { width: 245px; height: 180px; animation: orbit-two 11s ease-in-out infinite; }
+
+.ambient-dot {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #8fcda2;
+  box-shadow: 0 0 0 7px rgba(143, 205, 162, 0.14);
+  animation: dot-pulse 3.2s ease-in-out infinite;
+}
+
+.dot-one { top: 34px; right: 32px; }
+.dot-two { right: 210px; bottom: 34px; animation-delay: 1.1s; }
+
+.profile-overview {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 13px;
+}
+
+.overview-card {
   position: relative;
   display: grid;
-  gap: 9px;
-  padding: 20px 22px;
-  border: 1px solid rgba(148, 177, 157, 0.45);
-  border-radius: 20px;
-  background: rgba(251, 253, 250, 0.82);
+  grid-template-columns: 52px minmax(0, 1fr);
+  align-items: center;
+  gap: 14px;
+  min-height: 114px;
+  padding: 19px 20px;
+  overflow: hidden;
+  border: 1px solid var(--profile-line);
+  border-radius: 19px;
+  background: rgba(255, 255, 253, 0.94);
+  box-shadow: 0 11px 28px rgba(35, 66, 47, 0.045);
+  animation: reveal-up 520ms ease-out both;
 }
-.completion-label { color: #66736b; font-size: 12px; }
-.completion-card strong { color: #286c45; font-size: 34px; line-height: 1; }
-.completion-track { overflow: hidden; height: 8px; border-radius: 999px; background: #e3ebe5; }
-.completion-track i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #2d7049, #76aa84); transition: width 0.3s ease; }
-.completion-todo { display: flex; flex-wrap: wrap; gap: 8px 12px; color: #7b867f; font-size: 11px; }
-.completion-todo em { position: relative; padding-left: 11px; color: #647269; font-style: normal; }
-.completion-todo em::before { position: absolute; top: 5px; left: 0; width: 6px; height: 6px; border-radius: 50%; background: #cee2d2; content: ""; }
-.complete-button { justify-self: end; min-height: 38px; padding: 0 16px; border: 0; border-radius: 11px; background: #276a45; color: #fff; cursor: pointer; font-weight: 650; }
 
-.profile-grid { display: grid; grid-template-columns: minmax(0, 1.85fr) minmax(300px, 0.72fr); gap: 18px; align-items: start; }
-.profile-panel { overflow: hidden; border-radius: 24px; }
-.profile-tabs { display: flex; gap: 34px; padding: 0 28px; border-bottom: 1px solid #e5ebe6; }
-.profile-tabs button { position: relative; min-height: 64px; padding: 0 4px; border: 0; background: none; color: #6e7771; cursor: pointer; font-size: 14px; }
-.profile-tabs button.active { color: #276b47; font-weight: 700; }
-.profile-tabs button.active::after { position: absolute; right: 0; bottom: -1px; left: 0; height: 3px; border-radius: 99px 99px 0 0; background: #2c714a; content: ""; }
-.tab-content { min-height: 520px; padding: 26px 28px 12px; }
-.panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin-bottom: 24px; }
-.page-kicker { display: block; color: #3d7255; font-size: 10px; font-weight: 760; letter-spacing: 0.16em; }
-.panel-heading h2 { margin: 8px 0 0; font-size: 24px; font-weight: 680; }
-.save-status { padding: 7px 11px; border: 1px solid transparent; border-radius: 999px; background: #f0f3f0; color: #7d8780; font-size: 10px; }
-.save-status.active { background: #e9f4eb; color: #367252; }
-.save-status.warning { border-color: #efc98a; background: #fff8e9; color: #b8781f; }
-.section-intro { margin: -10px 0 24px; padding: 12px 14px; border-radius: 12px; background: #f5f8f5; color: #6e7a71; font-size: 12px; line-height: 1.7; }
+.overview-card:nth-child(2) { animation-delay: 70ms; }
+.overview-card:nth-child(3) { animation-delay: 130ms; }
+.overview-card:nth-child(4) { animation-delay: 190ms; }
 
-.form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 24px; }
-.avatar-form-grid { grid-template-columns: minmax(250px, 0.78fr) minmax(0, 1.1fr); }
-.avatar-field { display: flex; align-items: center; gap: 18px; min-height: 112px; }
-.form-avatar { width: 90px; height: 90px; flex: 0 0 auto; font-size: 30px; }
-.avatar-field p,
-.field-help { display: block; margin: 7px 0 0; color: #8a938d; font-size: 10px; line-height: 1.55; }
-.secondary-button { min-height: 36px; padding: 0 14px; border: 1px solid #d4ddd6; border-radius: 10px; background: #fff; color: #425b4c; cursor: pointer; }
-.profile-form :deep(.el-form-item) { margin-bottom: 22px; }
-.profile-form :deep(.el-form-item__label) { color: #536359; font-size: 12px; font-weight: 680; }
+.overview-card::after {
+  position: absolute;
+  right: -28px;
+  bottom: -44px;
+  width: 110px;
+  height: 110px;
+  border-radius: 50%;
+  content: "";
+  opacity: 0.55;
+}
+
+.overview-icon {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  width: 52px;
+  height: 52px;
+  place-items: center;
+  border-radius: 16px;
+}
+
+.overview-completion .overview-icon { background: #eaf4ec; color: #2f8757; }
+.overview-completion::after { background: #edf7ef; }
+.overview-focus .overview-icon { background: #f8eadf; color: #a96745; }
+.overview-focus::after { background: #fbefe6; }
+.overview-health .overview-icon { background: #eaf1f7; color: #4d7998; }
+.overview-health::after { background: #edf4f8; }
+.overview-ai .overview-icon { background: #f0ecf7; color: #746097; }
+.overview-ai::after { background: #f5f0fa; }
+
+.overview-copy {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  min-width: 0;
+}
+
+.overview-copy small { color: #858f89; font-size: 9px; }
+.overview-copy strong { margin-top: 5px; color: #21342a; font-size: 24px; font-weight: 700; line-height: 1; }
+.overview-copy .overview-text-value { font-size: 17px; }
+.overview-copy em { margin-left: 4px; font-size: 8px; font-style: normal; font-weight: 520; }
+.overview-copy > span { margin-top: 8px; overflow: hidden; color: #949d97; font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
+
+.profile-workspace {
+  display: grid;
+  grid-template-columns: 215px minmax(0, 1fr) 270px;
+  align-items: start;
+  gap: 15px;
+}
+
+.profile-tabs,
+.profile-panel,
+.side-card,
+.privacy-entry {
+  border: 1px solid var(--profile-line);
+  background: rgba(255, 255, 253, 0.95);
+  box-shadow: 0 14px 34px rgba(35, 66, 47, 0.045);
+}
+
+.profile-tabs {
+  position: sticky;
+  top: 18px;
+  display: grid;
+  gap: 7px;
+  padding: 10px;
+  border-radius: 20px;
+}
+
+.profile-tabs button {
+  display: grid;
+  grid-template-columns: 37px minmax(0, 1fr) 16px;
+  align-items: center;
+  gap: 9px;
+  min-height: 65px;
+  padding: 10px;
+  border: 1px solid transparent;
+  border-radius: 14px;
+  background: transparent;
+  color: #66746b;
+  cursor: pointer;
+  text-align: left;
+  transition: background 180ms ease, border-color 180ms ease, transform 180ms ease;
+}
+
+.profile-tabs button:hover { background: #f6f9f6; transform: translateX(2px); }
+.profile-tabs button.active { border-color: rgba(52, 137, 82, 0.18); background: #eaf4ec; color: #2f704d; }
+
+.profile-tabs button > span {
+  display: grid;
+  width: 37px;
+  height: 37px;
+  place-items: center;
+  border-radius: 11px;
+  background: #f0f4f1;
+}
+
+.profile-tabs button.active > span { background: white; color: #2f8052; }
+.profile-tabs button > div { display: grid; min-width: 0; gap: 3px; }
+.profile-tabs strong { font-size: 9px; }
+.profile-tabs small { overflow: hidden; color: #929b95; font-size: 7px; text-overflow: ellipsis; white-space: nowrap; }
+.profile-tabs button > svg { color: #87928b; }
+
+.profile-panel {
+  min-width: 0;
+  border-radius: 23px;
+  animation: reveal-up 560ms 210ms ease-out both;
+}
+
+.tab-content {
+  display: grid;
+  gap: 16px;
+  padding: 25px 26px 10px;
+}
+
+.panel-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 18px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid rgba(145, 162, 151, 0.17);
+}
+
+.panel-heading h2 {
+  margin: 8px 0 0;
+  color: #26382e;
+  font-size: 23px;
+  font-weight: 680;
+  letter-spacing: -0.03em;
+}
+
+.panel-heading p { margin: 7px 0 0; color: #89938d; font-size: 9px; line-height: 1.6; }
+
+.save-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 29px;
+  padding: 0 9px;
+  border-radius: 999px;
+  background: #f0f3f1;
+  color: #7f8a83;
+  font-size: 8px;
+  white-space: nowrap;
+}
+
+.save-status i { width: 7px; height: 7px; border-radius: 50%; background: #9aa49d; }
+.save-status.active { background: #e7f2ea; color: #2f704d; }
+.save-status.active i { background: #39915d; }
+.save-status.warning { background: #fbefd8; color: #956721; }
+.save-status.warning i { background: #d59a3b; }
+
+.form-section {
+  display: grid;
+  gap: 15px;
+  padding: 18px;
+  border: 1px solid rgba(145, 162, 151, 0.16);
+  border-radius: 17px;
+  background: #fafcf9;
+}
+
+.section-title,
+.side-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.section-title > span,
+.side-icon {
+  display: grid;
+  width: 37px;
+  height: 37px;
+  place-items: center;
+  border-radius: 11px;
+  background: #e8f2ea;
+  color: #397e55;
+}
+
+.section-title > div,
+.side-heading > div { display: grid; gap: 3px; }
+.section-title strong { color: #354b3e; font-size: 11px; }
+.section-title small { color: #8a958e; font-size: 8px; }
+
+.avatar-editor {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr);
+  align-items: center;
+  gap: 15px;
+  padding: 14px;
+  border-radius: 14px;
+  background: white;
+}
+
+.form-avatar {
+  width: 72px;
+  height: 72px;
+  font-size: 25px;
+}
+
+.avatar-editor > div:last-child > strong { color: #354b3e; font-size: 11px; }
+.avatar-editor p { margin: 5px 0 0; color: #8b958f; font-size: 8px; }
+.avatar-actions { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 10px; }
+.avatar-actions button {
+  display: inline-flex;
+  min-height: 31px;
+  align-items: center;
+  gap: 6px;
+  padding: 0 9px;
+  border: 1px solid rgba(65, 116, 82, 0.18);
+  border-radius: 9px;
+  background: #f6f9f6;
+  color: #4e6a59;
+  cursor: pointer;
+  font-size: 8px;
+}
+.avatar-actions .remove-avatar { border-color: rgba(177, 76, 67, 0.14); background: #fff5f3; color: #b34f47; }
+
+.profile-form :deep(.el-form-item) { margin-bottom: 0; }
+.profile-form :deep(.el-form-item__label) { color: #52665a; font-size: 9px; font-weight: 650; }
 .profile-form :deep(.el-input__wrapper),
-.profile-form :deep(.el-textarea__inner),
 .profile-form :deep(.el-select__wrapper),
-.profile-form :deep(.el-date-editor),
-.profile-form :deep(.el-input-number) { border-radius: 11px; box-shadow: 0 0 0 1px rgba(91, 113, 99, 0.18) inset; }
-.profile-form :deep(.el-date-editor),
-.profile-form :deep(.el-input-number),
-.profile-form :deep(.el-select) { width: 100%; }
-.gender-segment { display: grid; grid-template-columns: repeat(3, 1fr); width: 100%; }
-.gender-segment :deep(.el-radio-button__inner) { width: 100%; min-height: 40px; padding: 12px; }
-.readonly-field { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 9px; min-height: 40px; padding: 0 13px; border: 1px solid #dde5df; border-radius: 11px; background: #f6f8f7; color: #78827c; }
-.readonly-field a { color: #2f704d; text-decoration: none; font-weight: 650; }
-.focus-options { display: flex; flex-wrap: wrap; gap: 10px; }
-.focus-options button { display: inline-flex; align-items: center; gap: 7px; min-height: 38px; padding: 0 13px; border: 1px solid #dce4de; border-radius: 10px; background: #fff; color: #5f6c64; cursor: pointer; }
-.focus-options button.selected { border-color: #55906b; background: #edf6ef; color: #2f704c; box-shadow: 0 0 0 1px rgba(64, 127, 82, 0.08); }
+.profile-form :deep(.el-input-number) {
+  width: 100%;
+  border-radius: 11px;
+  box-shadow: 0 0 0 1px rgba(139, 158, 146, 0.24) inset;
+}
+.profile-form :deep(.el-input__wrapper.is-focus),
+.profile-form :deep(.el-select__wrapper.is-focused) { box-shadow: 0 0 0 1px #69a17f inset, 0 0 0 3px rgba(62, 143, 91, 0.08); }
 
-.setting-block { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 20px; border: 1px solid #e0e7e2; border-radius: 16px; background: #fafcf9; }
-.setting-block strong,
-.setting-list strong,
-.reminder-settings strong { color: #33463a; font-size: 13px; }
-.setting-block p,
-.setting-list small,
-.reminder-settings p { display: block; margin: 6px 0 0; color: #7f8a82; font-size: 10px; line-height: 1.55; }
-.setting-list { display: grid; gap: 10px; margin-top: 16px; }
-.setting-list label { display: grid; grid-template-columns: 44px 1fr auto; align-items: center; gap: 13px; padding: 16px; border: 1px solid #e1e8e3; border-radius: 15px; background: #fff; }
-.setting-icon { display: grid; width: 42px; height: 42px; place-items: center; border-radius: 13px; background: #eaf3ec; color: #377253; }
-.reminder-settings { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-top: 16px; }
-.reminder-settings section { display: grid; grid-template-columns: 1fr auto; gap: 14px; padding: 18px; border: 1px solid #e0e7e2; border-radius: 16px; background: #fafcf9; }
-.reminder-settings :deep(.el-select) { grid-column: 1 / -1; width: 100%; }
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 17px 15px;
+}
 
-.privacy-tab { min-height: 480px; }
-.privacy-action-card { display: grid; grid-template-columns: 50px 1fr auto; align-items: center; gap: 14px; width: 100%; margin-bottom: 14px; padding: 18px; border: 1px solid #dfe7e1; border-radius: 16px; background: #fbfdfb; color: inherit; text-align: left; text-decoration: none; cursor: pointer; }
-.privacy-action-card > span { display: grid; width: 48px; height: 48px; place-items: center; border-radius: 14px; background: #e9f2eb; color: #397253; }
-.privacy-action-card strong { color: #33473a; font-size: 13px; }
-.privacy-action-card p { margin: 5px 0 0; color: #7d8980; font-size: 11px; line-height: 1.6; }
-.privacy-action-card.danger { border-color: #f0dddd; }
-.privacy-action-card.danger > span { background: #fbebeb; color: #a24d4d; }
+.field-help { display: block; margin-top: 5px; color: #98a09b; font-size: 7px; }
+.gender-segment { width: 100%; }
+.gender-segment :deep(.el-radio-button) { flex: 1; }
+.gender-segment :deep(.el-radio-button__inner) { width: 100%; }
 
-.profile-actions { display: flex; justify-content: center; gap: 16px; padding: 16px 28px 22px; border-top: 1px solid #e6ebe7; background: rgba(252, 253, 251, 0.95); }
+.readonly-field {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 11px;
+  border: 1px solid rgba(139, 158, 146, 0.24);
+  border-radius: 11px;
+  background: white;
+  color: #68766d;
+  font-size: 9px;
+}
+
+.readonly-field a { color: #2f7c50; font-weight: 680; text-decoration: none; }
+
+.focus-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.focus-options button {
+  display: grid;
+  grid-template-columns: 39px minmax(0, 1fr) 18px;
+  align-items: center;
+  gap: 10px;
+  min-height: 67px;
+  padding: 10px;
+  border: 1px solid rgba(145, 162, 151, 0.2);
+  border-radius: 13px;
+  background: white;
+  color: #596c60;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 180ms ease, background 180ms ease, transform 180ms ease;
+}
+
+.focus-options button:hover { border-color: rgba(52, 138, 83, 0.3); transform: translateY(-2px); }
+.focus-options button.selected { border-color: rgba(48, 135, 80, 0.34); background: #edf6ef; color: #2e704c; }
+.focus-options button > span { display: grid; width: 39px; height: 39px; place-items: center; border-radius: 12px; background: #f0f4f1; }
+.focus-options button.selected > span { background: white; color: #2f8052; }
+.focus-options button > div { display: grid; min-width: 0; gap: 3px; }
+.focus-options strong { font-size: 9px; }
+.focus-options small { overflow: hidden; color: #909a94; font-size: 7px; text-overflow: ellipsis; white-space: nowrap; }
+
+.textarea-field { position: relative; display: grid; gap: 7px; }
+.textarea-field > span { color: #52665a; font-size: 9px; font-weight: 650; }
+.textarea-field textarea {
+  min-height: 105px;
+  padding: 12px 13px 27px;
+  border: 1px solid rgba(139, 158, 146, 0.24);
+  border-radius: 12px;
+  outline: 0;
+  resize: vertical;
+  background: white;
+  color: #34483c;
+  font: inherit;
+  font-size: 9px;
+  line-height: 1.65;
+}
+.textarea-field textarea:focus { border-color: #69a17f; box-shadow: 0 0 0 3px rgba(62, 143, 91, 0.08); }
+.textarea-field > small { position: absolute; right: 10px; bottom: 9px; color: #9aa39d; font-size: 7px; }
+
+.health-summary-card {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 13px;
+  padding: 15px;
+  border: 1px solid rgba(74, 145, 96, 0.18);
+  border-radius: 15px;
+  background: linear-gradient(120deg, #edf6ef, #f9fcf8);
+}
+.health-summary-icon { display: grid; width: 48px; height: 48px; place-items: center; border-radius: 15px; background: #dceee2; color: #2c8554; }
+.health-summary-card > div > strong { display: block; margin-top: 5px; color: #315642; font-size: 12px; }
+.health-summary-card p { margin: 5px 0 0; color: #77847c; font-size: 8px; line-height: 1.55; }
+.health-summary-card > small { color: #8d9891; font-size: 7px; }
+
+.detail-level-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 17px;
+  border: 1px solid rgba(145, 162, 151, 0.17);
+  border-radius: 16px;
+  background: #fafcf9;
+}
+.detail-level-card > div { display: flex; align-items: center; gap: 11px; }
+.detail-icon { display: grid; width: 42px; height: 42px; place-items: center; border-radius: 13px; background: #e9f2eb; color: #3a8056; }
+.detail-level-card strong { color: #344a3d; font-size: 10px; }
+.detail-level-card p { margin: 4px 0 0; color: #89938d; font-size: 8px; }
+.detail-level :deep(.el-radio-button__inner) { font-size: 9px; }
+
+.setting-list {
+  display: grid;
+  gap: 9px;
+}
+.setting-list label {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 11px;
+  min-height: 70px;
+  padding: 12px;
+  border: 1px solid rgba(145, 162, 151, 0.17);
+  border-radius: 14px;
+  background: #fafcf9;
+}
+.setting-icon { display: grid; width: 42px; height: 42px; place-items: center; border-radius: 13px; background: #e9f2eb; color: #3a8056; }
+.setting-list label > span:nth-child(2) { display: grid; gap: 4px; }
+.setting-list strong { color: #344a3d; font-size: 10px; }
+.setting-list small { color: #89938d; font-size: 8px; }
+
+.reminder-section { display: grid; gap: 14px; padding-top: 3px; }
+.reminder-settings { display: grid; gap: 9px; }
+.reminder-settings section {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto 118px;
+  align-items: center;
+  gap: 11px;
+  padding: 12px;
+  border: 1px solid rgba(145, 162, 151, 0.17);
+  border-radius: 14px;
+  background: #fafcf9;
+}
+.reminder-icon { display: grid; width: 42px; height: 42px; place-items: center; border-radius: 13px; background: #f5eadc; color: #9e6d37; }
+.reminder-settings strong { color: #344a3d; font-size: 10px; }
+.reminder-settings p { margin: 4px 0 0; color: #89938d; font-size: 8px; }
+
+.privacy-grid { display: grid; gap: 10px; }
+.privacy-action-card {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) 20px;
+  align-items: center;
+  gap: 12px;
+  min-height: 82px;
+  padding: 14px;
+  border: 1px solid rgba(145, 162, 151, 0.18);
+  border-radius: 15px;
+  background: #fafcf9;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+  text-decoration: none;
+  transition: border-color 180ms ease, transform 180ms ease;
+}
+.privacy-action-card:hover { border-color: rgba(52, 138, 83, 0.3); transform: translateX(3px); }
+.privacy-action-card > span { display: grid; width: 48px; height: 48px; place-items: center; border-radius: 15px; background: #e7f2ea; color: #317a51; }
+.privacy-action-card > div { display: grid; gap: 5px; }
+.privacy-action-card strong { color: #344a3d; font-size: 10px; }
+.privacy-action-card p { margin: 0; color: #89938d; font-size: 8px; line-height: 1.5; }
+.privacy-action-card > svg { color: #7a8880; }
+.privacy-action-card.danger { border-color: rgba(177, 76, 67, 0.15); }
+.privacy-action-card.danger > span { background: #fae9e6; color: #b34f47; }
+
+.privacy-note { display: grid; grid-template-columns: 43px minmax(0, 1fr); align-items: center; gap: 12px; padding: 15px; border-radius: 14px; background: #edf6ef; }
+.privacy-note > span { display: grid; width: 43px; height: 43px; place-items: center; border-radius: 13px; background: white; color: #317a51; }
+.privacy-note strong { color: #34513f; font-size: 10px; }
+.privacy-note p { margin: 5px 0 0; color: #748179; font-size: 8px; line-height: 1.55; }
+
+.profile-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 18px 26px;
+  border-top: 1px solid rgba(145, 162, 151, 0.17);
+  background: #fafcf9;
+  border-radius: 0 0 23px 23px;
+}
+.action-tip { display: flex; align-items: center; gap: 7px; color: #7d8981; font-size: 8px; }
+.action-tip svg { color: #3d7f58; }
+.profile-actions > div:last-child { display: flex; gap: 8px; }
 .cancel-button,
-.save-button { display: inline-flex; min-width: 190px; min-height: 44px; align-items: center; justify-content: center; gap: 8px; border-radius: 11px; cursor: pointer; font-weight: 680; }
-.cancel-button { border: 1px solid #d7dfd9; background: #fff; color: #536159; }
-.save-button { border: 0; background: linear-gradient(135deg, #286d47, #337d52); color: #fff; box-shadow: 0 8px 18px rgba(38, 105, 67, 0.18); }
+.save-button {
+  display: inline-flex;
+  min-height: 38px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 13px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 9px;
+  font-weight: 680;
+}
+.cancel-button { border: 1px solid rgba(70, 98, 82, 0.17); background: white; color: #596a60; }
+.save-button { border: 1px solid #286f49; background: linear-gradient(150deg, #398d5e, #246b46); color: white; box-shadow: 0 8px 17px rgba(37, 111, 72, 0.16); }
 .cancel-button:disabled,
-.save-button:disabled,
-.avatar-camera:disabled,
-.secondary-button:disabled { cursor: not-allowed; opacity: 0.5; }
+.save-button:disabled { cursor: not-allowed; opacity: 0.5; box-shadow: none; }
 
-.profile-side { display: grid; align-content: start; gap: 14px; }
-.preference-card,
-.side-card { padding: 22px; border-radius: 21px; }
-.preference-card { background: linear-gradient(155deg, #fbfdf9, #eaf4e9); }
-.preference-card h2,
-.side-card h3 { margin: 0; color: #27352c; font-size: 19px; }
-.preference-card ul { display: grid; gap: 16px; margin: 20px 0 0; padding: 0; list-style: none; }
-.preference-card li { display: grid; grid-template-columns: 44px 1fr; align-items: center; gap: 12px; }
-.preference-card li > span { display: grid; width: 42px; height: 42px; place-items: center; border-radius: 13px; background: rgba(255, 255, 255, 0.78); color: #367251; }
-.preference-card li strong { color: #405247; font-size: 12px; }
-.preference-card li p { margin: 4px 0 0; color: #7c8880; font-size: 10px; line-height: 1.5; }
-.side-card-title { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.side-card-title > span { padding: 4px 8px; border-radius: 8px; background: #e9f4eb; color: #397453; font-size: 10px; }
-.report-preview { display: grid; grid-template-columns: 58px 1fr; gap: 13px; margin-top: 17px; }
-.report-icon { display: grid; width: 58px; height: 58px; place-items: center; border-radius: 14px; background: linear-gradient(145deg, #dfeee3, #c5dccd); color: #337151; }
-.report-preview strong { display: block; color: #34463b; font-size: 12px; }
-.report-preview time { display: block; margin-top: 4px; color: #8a948e; font-size: 9px; }
-.report-preview p { display: -webkit-box; overflow: hidden; margin: 7px 0 0; color: #6e7a72; font-size: 10px; line-height: 1.55; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
-.outline-button { display: block; min-height: 36px; margin: 16px 0 0 auto; padding: 0 15px; border: 1px solid #d3ded6; border-radius: 10px; background: #fff; color: #367151; cursor: pointer; font-weight: 650; }
-.empty-side-state { margin-top: 15px; padding: 16px; border-radius: 12px; background: #f5f8f5; color: #7c8880; font-size: 11px; line-height: 1.65; }
-.reminder-card { display: grid; gap: 12px; }
-.reminder-row { display: grid; grid-template-columns: 38px 1fr; align-items: center; gap: 10px; padding-top: 12px; border-top: 1px solid #e7ece8; }
-.reminder-row > span { display: grid; width: 36px; height: 36px; place-items: center; border-radius: 11px; background: #eaf3ec; color: #377252; }
-.reminder-row strong { display: block; color: #405047; font-size: 11px; }
-.reminder-row small { display: block; margin-top: 3px; color: #8a948e; font-size: 9px; }
-.privacy-entry { display: grid; grid-template-columns: 48px minmax(0, 1fr) auto; align-items: center; gap: 13px; min-height: 104px; padding: 17px; border-radius: 20px; color: inherit; text-decoration: none; }
-.privacy-icon { display: grid; width: 48px; height: 48px; place-items: center; border-radius: 14px; background: #e7f1e9; color: #397253; }
-.privacy-entry strong { color: #34483c; font-size: 12px; }
-.privacy-entry p { margin: 5px 0 0; color: #818c84; font-size: 9px; }
+.profile-side {
+  display: grid;
+  gap: 13px;
+}
+.side-card,
+.privacy-entry { padding: 17px; border-radius: 18px; }
+.side-card-title { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.side-card-title h3,
+.side-heading h3 { margin: 5px 0 0; color: #33483c; font-size: 13px; }
+.side-card-title > span { min-height: 25px; padding: 0 8px; border-radius: 999px; background: #e7f2ea; color: #317451; font-size: 7px; line-height: 25px; }
+
+.benefit-card ul { display: grid; gap: 12px; margin: 17px 0 0; padding: 0; list-style: none; }
+.benefit-card li { display: grid; grid-template-columns: 37px minmax(0, 1fr); align-items: center; gap: 10px; }
+.benefit-card li > span { display: grid; width: 37px; height: 37px; place-items: center; border-radius: 11px; background: #edf4ef; color: #397e55; }
+.benefit-card li strong { color: #405448; font-size: 9px; }
+.benefit-card li p { margin: 4px 0 0; color: #89938d; font-size: 7px; line-height: 1.5; }
+
+.report-preview { display: grid; grid-template-columns: 43px minmax(0, 1fr); align-items: start; gap: 10px; margin-top: 15px; }
+.report-icon { display: grid; width: 43px; height: 43px; place-items: center; border-radius: 13px; background: #e7f2ea; color: #317a51; }
+.report-preview > div { display: grid; gap: 4px; min-width: 0; }
+.report-preview strong { color: #3c5144; font-size: 9px; }
+.report-preview time { color: #8b958f; font-size: 7px; }
+.report-preview p { display: -webkit-box; margin: 2px 0 0; overflow: hidden; color: #7d8981; font-size: 7px; line-height: 1.5; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.outline-button { display: flex; width: 100%; min-height: 35px; align-items: center; justify-content: space-between; margin-top: 14px; padding: 0 10px; border: 1px solid rgba(65, 116, 82, 0.18); border-radius: 10px; background: #f7faf7; color: #3d6e50; cursor: pointer; font-size: 8px; font-weight: 680; }
+
+.empty-side-state { display: grid; grid-template-columns: 43px minmax(0, 1fr); align-items: center; gap: 10px; margin-top: 15px; padding: 12px; border-radius: 13px; background: #f7f9f7; }
+.empty-side-state > span { display: grid; width: 43px; height: 43px; place-items: center; border-radius: 13px; background: #e9f2eb; color: #3c8057; }
+.empty-side-state strong { color: #405448; font-size: 9px; }
+.empty-side-state p { margin: 4px 0 0; color: #89938d; font-size: 7px; line-height: 1.5; }
+
+.reminder-row { display: grid; grid-template-columns: 36px minmax(0, 1fr); align-items: center; gap: 9px; margin-top: 11px; padding: 10px; border-radius: 12px; background: #f8faf8; }
+.reminder-row > span { display: grid; width: 36px; height: 36px; place-items: center; border-radius: 11px; background: #f5eadc; color: #9e6d37; }
+.reminder-row strong { color: #405448; font-size: 8px; }
+.reminder-row small { display: block; margin-top: 3px; color: #89938d; font-size: 7px; }
+.reminder-card > button { width: 100%; min-height: 34px; margin-top: 12px; border: 1px solid rgba(65, 116, 82, 0.18); border-radius: 10px; background: #f7faf7; color: #3d6e50; cursor: pointer; font-size: 8px; font-weight: 680; }
+
+.privacy-entry { display: grid; grid-template-columns: 41px minmax(0, 1fr) 18px; align-items: center; gap: 10px; color: inherit; text-decoration: none; }
+.privacy-icon { display: grid; width: 41px; height: 41px; place-items: center; border-radius: 13px; background: #e7f2ea; color: #317a51; }
+.privacy-entry strong { color: #3c5144; font-size: 9px; }
+.privacy-entry p { margin: 4px 0 0; color: #89938d; font-size: 7px; }
+.privacy-entry > svg { color: #7b8880; }
+
 .hidden-file-input { display: none; }
+.profile-note { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 10px 16px; color: #849088; font-size: 9px; text-align: center; }
 
-@media (max-width: 1100px) {
-  .profile-head { grid-template-columns: 120px minmax(0, 1fr); }
-  .completion-card { grid-column: 1 / -1; }
-  .profile-grid { grid-template-columns: 1fr; }
-  .profile-side { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+button:focus-visible,
+a:focus-visible,
+textarea:focus-visible { outline: 3px solid rgba(54, 150, 96, 0.2); outline-offset: 2px; }
+.spinning { animation: spin 0.9s linear infinite; }
+
+@keyframes reveal-up {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes grid-drift {
+  from { background-position: 0 0, 0 0; }
+  to { background-position: 22px 15px, 22px 15px; }
+}
+@keyframes orbit-one {
+  0%, 100% { transform: translate(-50%, -50%) rotate(11deg); }
+  50% { transform: translate(-50%, -54%) rotate(16deg); }
+}
+@keyframes orbit-two {
+  0%, 100% { transform: translate(-50%, -50%) rotate(-18deg); }
+  50% { transform: translate(-50%, -46%) rotate(-23deg); }
+}
+@keyframes dot-pulse {
+  0%, 100% { opacity: 0.72; transform: scale(0.9); }
+  50% { opacity: 1; transform: scale(1.15); }
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+@media (max-width: 1160px) {
+  .profile-hero { grid-template-columns: minmax(0, 1fr) 310px; padding-inline: 34px; }
+  .profile-workspace { grid-template-columns: 200px minmax(0, 1fr); }
+  .profile-side { grid-column: 1 / -1; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .privacy-entry { align-self: stretch; }
+}
+
+@media (max-width: 960px) {
+  .profile-hero { grid-template-columns: 1fr; }
+  .completion-visual { margin-top: 21px; max-width: 430px; }
+  .hero-ambient { opacity: 0.4; }
+  .profile-overview { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .profile-workspace { grid-template-columns: 1fr; }
+  .profile-tabs { position: static; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .profile-tabs button { grid-template-columns: 34px minmax(0, 1fr); }
+  .profile-tabs button > svg { display: none; }
+  .profile-side { grid-column: auto; }
 }
 
 @media (max-width: 760px) {
-  .profile-head { grid-template-columns: 1fr; justify-items: start; padding: 24px; }
-  .profile-tabs { gap: 16px; overflow-x: auto; padding: 0 18px; }
-  .profile-tabs button { flex: 0 0 auto; }
-  .tab-content { padding: 22px 18px 10px; }
+  .profile-page { gap: 14px; }
+  .profile-hero { padding: 27px 22px; border-radius: 22px; }
+  .hero-profile { grid-template-columns: 92px minmax(0, 1fr); gap: 17px; }
+  .avatar-stage { width: 92px; height: 92px; }
+  .hero-avatar { width: 84px; height: 84px; font-size: 31px; }
+  .avatar-camera { width: 35px; height: 35px; }
+  .hero-copy h1 { font-size: clamp(32px, 9vw, 43px); }
+  .completion-visual { grid-template-columns: 84px minmax(0, 1fr); }
+  .completion-ring { width: 82px; height: 82px; }
+  .completion-ring > span { width: 64px; height: 64px; }
+  .completion-ring strong { font-size: 21px; }
+  .profile-overview { grid-template-columns: 1fr; }
+  .profile-tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .profile-panel { border-radius: 20px; }
+  .tab-content { padding: 21px 19px 8px; }
+  .panel-heading { align-items: flex-start; flex-direction: column; }
   .form-grid,
-  .avatar-form-grid,
-  .reminder-settings,
-  .profile-side { grid-template-columns: 1fr; }
-  .setting-block { align-items: flex-start; flex-direction: column; }
-  .profile-actions { position: sticky; bottom: 0; padding: 14px 18px; }
+  .focus-options { grid-template-columns: 1fr; }
+  .detail-level-card { align-items: flex-start; flex-direction: column; }
+  .reminder-settings section { grid-template-columns: 42px minmax(0, 1fr) auto; }
+  .reminder-settings :deep(.el-select) { grid-column: 2 / -1; width: 100%; }
+  .profile-actions { align-items: flex-start; flex-direction: column; padding: 16px 19px; }
+  .profile-actions > div:last-child { width: 100%; }
   .cancel-button,
-  .save-button { min-width: 0; flex: 1; }
+  .save-button { flex: 1; }
+  .profile-side { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 520px) {
+  .profile-hero { padding: 24px 18px; }
+  .hero-profile { grid-template-columns: 1fr; }
+  .avatar-stage { margin: 0 auto; }
+  .hero-copy { text-align: center; }
+  .hero-tags { justify-content: center; }
+  .completion-visual { grid-template-columns: 1fr; justify-items: center; text-align: center; }
+  .profile-tabs { grid-template-columns: 1fr; }
+  .profile-tabs button { grid-template-columns: 36px minmax(0, 1fr) 16px; }
+  .profile-tabs button > svg { display: block; }
+  .avatar-editor { grid-template-columns: 1fr; justify-items: center; text-align: center; }
+  .avatar-actions { justify-content: center; }
+  .health-summary-card { grid-template-columns: 43px minmax(0, 1fr); }
+  .health-summary-card > small { grid-column: 2; }
+  .detail-level { width: 100%; }
+  .detail-level :deep(.el-radio-button) { flex: 1; }
+  .detail-level :deep(.el-radio-button__inner) { width: 100%; }
+  .reminder-settings section { grid-template-columns: 40px minmax(0, 1fr); }
+  .reminder-settings section > .el-switch { grid-column: 1; }
+  .reminder-settings section > .el-select { grid-column: 2; }
+  .action-tip { align-items: flex-start; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; }
+  .profile-hero,
+  .overview-card,
+  .profile-panel,
+  .ambient-grid,
+  .ambient-orbit,
+  .ambient-dot,
+  .spinning { animation: none; }
+  .profile-tabs button,
+  .focus-options button,
+  .privacy-action-card { transition: none; }
+  .profile-tabs button:hover,
+  .focus-options button:hover,
+  .privacy-action-card:hover { transform: none; }
 }
 </style>
