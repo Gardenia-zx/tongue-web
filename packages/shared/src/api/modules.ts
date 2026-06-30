@@ -11,6 +11,7 @@ import type {
   FeatureTrend,
   HealthPlan,
   HealthPlanDraftUpdateRequest,
+  HealthPlanReviewResult,
   NotificationItem,
   ReportCompareResult,
   ReportDetail,
@@ -230,6 +231,12 @@ export const healthPlanApi = {
   },
   updateDraft(planId: number, body: HealthPlanDraftUpdateRequest) {
     return apiRequest<HealthPlan>(`/api/health-plans/${planId}/draft`, { method: "PUT", body });
+  },
+  review(planId: number) {
+    return apiRequest<HealthPlanReviewResult>(`/api/health-plans/${planId}/review`, { method: "POST" });
+  },
+  generateDetailed(planId: number) {
+    return apiRequest<HealthPlan>(`/api/health-plans/${planId}/generate-detailed`, { method: "POST" });
   },
   activate(planId: number) {
     return apiRequest<HealthPlan>(`/api/health-plans/${planId}/activate`, { method: "POST" });

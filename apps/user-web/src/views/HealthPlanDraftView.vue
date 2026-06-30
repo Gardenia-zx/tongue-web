@@ -12,9 +12,13 @@
         </div>
       </div>
       <div class="head-actions">
-        <button class="secondary-button" type="button" :disabled="loading || saving" @click="saveDraft">
+        <button class="secondary-button" type="button" :disabled="loading || saving" @click="() => saveDraft()">
           <Save :size="16" />
           {{ saving ? "保存中" : "保存草稿" }}
+        </button>
+        <button class="secondary-button" type="button" :disabled="loading || reviewing" @click="reviewPlan">
+          <Sparkles :size="16" />
+          {{ reviewing ? "评估中" : "提交给 AI 评估" }}
         </button>
         <button class="primary-button" type="button" :disabled="loading || activating" @click="activatePlan">
           <PlayCircle :size="17" />
@@ -33,6 +37,39 @@
           <p>开始计划前可以自由修改。启用后，健康计划首页会按当天日期展示你保存的具体安排。</p>
         </div>
         <span>来自报告 #{{ plan.sourceReportId }}</span>
+      </section>
+
+      <section v-if="reviewResult" class="review-panel">
+        <div>
+          <span class="card-kicker">AI REVIEW</span>
+          <h2>{{ reviewTitle }}</h2>
+          <p>{{ reviewResult.summary }}</p>
+        </div>
+        <ul v-if="reviewResult.issues?.length">
+          <li v-for="item in reviewResult.issues" :key="item">{{ item }}</li>
+        </ul>
+        <ul v-if="reviewResult.suggestions?.length">
+          <li v-for="item in reviewResult.suggestions" :key="item">{{ item }}</li>
+        </ul>
+        <div class="review-actions">
+          <button
+            v-if="reviewResult.recommendedAction === 'ACTIVATE'"
+            class="primary-button"
+            type="button"
+            @click="activatePlan"
+          >
+            采用并开始计划
+          </button>
+          <button
+            v-else
+            class="primary-button"
+            type="button"
+            :disabled="generating"
+            @click="generateDetailedPlan"
+          >
+            {{ generating ? "生成中" : "让 AI 生成更具体计划" }}
+          </button>
+        </div>
       </section>
 
       <nav class="day-tabs" aria-label="选择计划日期">
@@ -184,8 +221,11 @@
           <strong>第 {{ activeDayIndex }} 天已编辑</strong>
           <span>建议逐日检查后再启用，避免出现吃不到或不适合的安排。</span>
         </div>
-        <button class="secondary-button" type="button" :disabled="saving" @click="saveDraft">
+        <button class="secondary-button" type="button" :disabled="saving" @click="() => saveDraft()">
           <Save :size="16" />保存草稿
+        </button>
+        <button class="secondary-button" type="button" :disabled="reviewing" @click="reviewPlan">
+          <Sparkles :size="16" />提交给 AI 评估
         </button>
         <button class="primary-button" type="button" :disabled="activating" @click="activatePlan">
           <PlayCircle :size="17" />确认并开始计划
@@ -220,6 +260,7 @@ import {
   healthPlanApi,
   type HealthPlan,
   type HealthPlanDay,
+  type HealthPlanReviewResult,
 } from "@tongue/shared";
 import EditableStringList from "../components/health/EditableStringList.vue";
 
@@ -229,11 +270,52 @@ const planId = Number(route.params.planId);
 const loading = ref(false);
 const saving = ref(false);
 const activating = ref(false);
+const reviewing = ref(false);
+const generating = ref(false);
 const plan = ref<HealthPlan | null>(null);
 const days = ref<HealthPlanDay[]>([]);
+const reviewResult = ref<HealthPlanReviewResult | null>(null);
 const activeDayIndex = ref(1);
 
 const currentDay = computed(() => days.value.find((day) => day.dayIndex === activeDayIndex.value));
+const reviewTitle = computed(() => {
+  if (reviewResult.value?.status === "REASONABLE") return "这份计划可以采用";
+  if (reviewResult.value?.status === "NEEDS_IMPROVEMENT") return "这份计划建议再调整";
+  return "AI 评估暂时失败";
+});
+
+function normalizeReviewResult(result: HealthPlanReviewResult): HealthPlanReviewResult {
+  const status = result.status || "FAILED";
+  const summary =
+    result.summary ||
+    (status === "REASONABLE"
+      ? "AI 认为这份计划整体可以采用。"
+      : status === "NEEDS_IMPROVEMENT"
+        ? "AI 认为这份计划还需要先调整。"
+        : "AI 评估暂时失败，请稍后再试。");
+
+  return {
+    ...result,
+    status,
+    summary,
+    issues: result.issues || [],
+    suggestions: result.suggestions || [],
+    recommendedAction:
+      result.recommendedAction || (status === "REASONABLE" ? "ACTIVATE" : "GENERATE_DETAILED"),
+  };
+}
+
+function showReviewMessage(result: HealthPlanReviewResult) {
+  if (result.status === "REASONABLE") {
+    ElMessage.success("AI 评估完成：这份计划可以采用");
+    return;
+  }
+  if (result.status === "NEEDS_IMPROVEMENT") {
+    ElMessage.warning("AI 评估完成：建议先调整后再采用");
+    return;
+  }
+  ElMessage.warning(result.summary || "AI 评估暂时失败");
+}
 
 onMounted(load);
 
@@ -266,6 +348,7 @@ async function saveDraft(showMessage = true) {
     });
     plan.value = result;
     days.value = cloneDays(result.days || days.value);
+    if (showMessage) reviewResult.value = null;
     if (showMessage) ElMessage.success("计划草稿已保存");
     return true;
   } catch (error) {
@@ -302,6 +385,47 @@ async function activatePlan() {
   }
 }
 
+async function reviewPlan() {
+  if (!plan.value || reviewing.value) return;
+  const saved = await saveDraft(false);
+  if (!saved) return;
+  reviewing.value = true;
+  try {
+    const result = normalizeReviewResult(await healthPlanApi.review(plan.value.planId));
+    reviewResult.value = result;
+    showReviewMessage(result);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "AI 评估失败";
+    reviewResult.value = normalizeReviewResult({
+      status: "FAILED",
+      summary: message,
+      issues: [],
+      suggestions: ["可以稍后重试，或先手动调整计划后直接启用。"],
+      recommendedAction: "GENERATE_DETAILED",
+    });
+    ElMessage.error(message);
+  } finally {
+    reviewing.value = false;
+  }
+}
+
+async function generateDetailedPlan() {
+  if (!plan.value || generating.value) return;
+  generating.value = true;
+  try {
+    const result = await healthPlanApi.generateDetailed(plan.value.planId);
+    plan.value = result;
+    days.value = cloneDays(result.days || []);
+    activeDayIndex.value = days.value[0]?.dayIndex || 1;
+    reviewResult.value = null;
+    ElMessage.success("AI 已生成更具体的 7 天计划，请确认后开始");
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : "生成具体计划失败");
+  } finally {
+    generating.value = false;
+  }
+}
+
 function cloneDays(value: HealthPlanDay[]) {
   return JSON.parse(JSON.stringify(value)) as HealthPlanDay[];
 }
@@ -314,5 +438,5 @@ function shortDate(value?: string) {
 </script>
 
 <style scoped>
-.draft-page{display:grid;gap:20px;width:min(1220px,100%);margin:0 auto;padding-bottom:96px}.draft-head{display:flex;align-items:flex-end;justify-content:space-between;gap:24px}.head-left{display:flex;align-items:flex-start;gap:14px}.back-button{display:grid;width:40px;height:40px;place-items:center;border:1px solid #d8e2db;border-radius:12px;background:#fff;color:#42614f;cursor:pointer}.page-kicker,.card-kicker{display:block;color:#3f7058;font-size:10px;font-weight:800;letter-spacing:.16em}.draft-head h1{margin:8px 0 0;color:#263a2f;font-family:"Noto Serif SC","Source Han Serif SC",serif;font-size:clamp(34px,4vw,52px);font-weight:580;letter-spacing:-.045em}.draft-head p{max-width:700px;margin:9px 0 0;color:#748078;font-size:13px;line-height:1.75}.head-actions,.sticky-actions{display:flex;align-items:center;gap:10px}.primary-button,.secondary-button{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:42px;padding:0 16px;border-radius:13px;cursor:pointer;font-size:12px;font-weight:680}.primary-button{border:0;background:#245d3d;color:#fff;box-shadow:0 9px 20px rgba(36,93,61,.18)}.secondary-button{border:1px solid #d4dfd7;background:#fff;color:#41604e}.primary-button:disabled,.secondary-button:disabled{opacity:.55;cursor:not-allowed}.draft-notice{display:grid;grid-template-columns:40px minmax(0,1fr) auto;gap:13px;align-items:center;padding:17px 19px;border:1px solid #d6e4da;border-radius:18px;background:linear-gradient(135deg,#f6fbf7,#edf6f0);color:#315b43}.draft-notice>svg{padding:9px;box-sizing:content-box;border-radius:12px;background:#fff}.draft-notice>div{display:grid;gap:4px}.draft-notice p{margin:0;color:#66786d;font-size:12px}.draft-notice>span{color:#64806e;font-size:11px}.day-tabs{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:8px;padding:8px;border:1px solid rgba(183,194,184,.64);border-radius:18px;background:rgba(255,254,249,.9)}.day-tabs button{display:grid;gap:4px;min-height:64px;place-items:center;border:1px solid transparent;border-radius:13px;background:transparent;color:#718078;cursor:pointer}.day-tabs button span{font-size:13px;font-weight:650}.day-tabs button small{font-size:10px}.day-tabs button.active{border-color:#6f9f82;background:#eaf4ed;color:#245d3d;box-shadow:0 8px 18px rgba(55,100,73,.08)}.editor-grid{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,.95fr);gap:16px}.right-column{display:grid;gap:16px}.editor-card,.empty-panel{padding:23px;border:1px solid rgba(183,194,184,.66);border-radius:23px;background:rgba(255,254,249,.95);box-shadow:0 16px 42px rgba(54,75,63,.06)}.card-heading{display:flex;align-items:center;gap:12px;margin-bottom:20px}.card-icon{display:grid;width:44px;height:44px;place-items:center;border-radius:14px}.diet-card .card-icon{background:#f6ead8;color:#95652f}.exercise-card .card-icon{background:#e2f0e7;color:#32704d}.sleep-card .card-icon{background:#ece8f3;color:#6d648b}.observation-card .card-icon{background:#edf1e9;color:#5d755f}.card-heading h2{margin:3px 0 0;color:#2b4034;font-size:22px}.field-group{display:grid;gap:9px;margin-top:17px;padding-top:17px;border-top:1px solid #edf0ed}.field-group:first-of-type{margin-top:0;padding-top:0;border-top:0}.field-group>label,.block-field>span,.two-column-fields label>span{color:#53665b;font-size:12px;font-weight:680}.field-group.compact{margin-top:15px;padding-top:15px}.two-column-fields{display:grid;grid-template-columns:minmax(0,1fr) 170px;gap:12px}.two-column-fields label,.block-field{display:grid;gap:8px}.block-field{margin-top:14px}.sticky-actions{position:sticky;bottom:14px;z-index:5;padding:14px 16px;border:1px solid rgba(181,193,183,.75);border-radius:18px;background:rgba(255,254,250,.94);box-shadow:0 18px 44px rgba(40,62,50,.14);backdrop-filter:blur(14px)}.sticky-actions>div{display:grid;gap:3px;margin-right:auto}.sticky-actions strong{color:#304a3a;font-size:13px}.sticky-actions span{color:#7d8981;font-size:11px}.empty-panel{display:grid;justify-items:center;gap:14px;padding:54px 24px;text-align:center}.empty-panel svg{color:#3f7058}.empty-panel h2{margin:0;color:#2d4135}.empty-panel p{max-width:520px;margin:0;color:#738078;line-height:1.7}@media(max-width:960px){.draft-head{align-items:flex-start;flex-direction:column}.editor-grid{grid-template-columns:1fr}.day-tabs{grid-template-columns:repeat(4,minmax(0,1fr))}}@media(max-width:640px){.head-actions{width:100%;display:grid;grid-template-columns:1fr 1fr}.day-tabs{grid-template-columns:repeat(2,minmax(0,1fr))}.two-column-fields{grid-template-columns:1fr}.sticky-actions{align-items:stretch;flex-direction:column}.sticky-actions>div{margin-right:0}.sticky-actions button{width:100%}.draft-page{padding-bottom:150px}}
+.draft-page{display:grid;gap:20px;width:min(1220px,100%);margin:0 auto;padding-bottom:96px}.draft-head{display:flex;align-items:flex-end;justify-content:space-between;gap:24px}.head-left{display:flex;align-items:flex-start;gap:14px}.back-button{display:grid;width:40px;height:40px;place-items:center;border:1px solid #d8e2db;border-radius:12px;background:#fff;color:#42614f;cursor:pointer}.page-kicker,.card-kicker{display:block;color:#3f7058;font-size:10px;font-weight:800;letter-spacing:.16em}.draft-head h1{margin:8px 0 0;color:#263a2f;font-family:"Noto Serif SC","Source Han Serif SC",serif;font-size:clamp(34px,4vw,52px);font-weight:580;letter-spacing:-.045em}.draft-head p{max-width:700px;margin:9px 0 0;color:#748078;font-size:13px;line-height:1.75}.head-actions,.sticky-actions{display:flex;align-items:center;gap:10px}.primary-button,.secondary-button{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:42px;padding:0 16px;border-radius:13px;cursor:pointer;font-size:12px;font-weight:680}.primary-button{border:0;background:#245d3d;color:#fff;box-shadow:0 9px 20px rgba(36,93,61,.18)}.secondary-button{border:1px solid #d4dfd7;background:#fff;color:#41604e}.primary-button:disabled,.secondary-button:disabled{opacity:.55;cursor:not-allowed}.draft-notice{display:grid;grid-template-columns:40px minmax(0,1fr) auto;gap:13px;align-items:center;padding:17px 19px;border:1px solid #d6e4da;border-radius:18px;background:linear-gradient(135deg,#f6fbf7,#edf6f0);color:#315b43}.draft-notice>svg{padding:9px;box-sizing:content-box;border-radius:12px;background:#fff}.draft-notice>div{display:grid;gap:4px}.draft-notice p{margin:0;color:#66786d;font-size:12px}.draft-notice>span{color:#64806e;font-size:11px}.review-panel{display:grid;gap:12px;padding:18px 20px;border:1px solid #d8e4dc;border-radius:18px;background:#fffefa}.review-panel h2{margin:4px 0;color:#2d4135}.review-panel p{margin:0;color:#64736a;line-height:1.7}.review-panel ul{margin:0;padding-left:20px;color:#59685f;line-height:1.8}.review-actions{display:flex;gap:10px;flex-wrap:wrap}.day-tabs{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:8px;padding:8px;border:1px solid rgba(183,194,184,.64);border-radius:18px;background:rgba(255,254,249,.9)}.day-tabs button{display:grid;gap:4px;min-height:64px;place-items:center;border:1px solid transparent;border-radius:13px;background:transparent;color:#718078;cursor:pointer}.day-tabs button span{font-size:13px;font-weight:650}.day-tabs button small{font-size:10px}.day-tabs button.active{border-color:#6f9f82;background:#eaf4ed;color:#245d3d;box-shadow:0 8px 18px rgba(55,100,73,.08)}.editor-grid{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,.95fr);gap:16px}.right-column{display:grid;gap:16px}.editor-card,.empty-panel{padding:23px;border:1px solid rgba(183,194,184,.66);border-radius:23px;background:rgba(255,254,249,.95);box-shadow:0 16px 42px rgba(54,75,63,.06)}.card-heading{display:flex;align-items:center;gap:12px;margin-bottom:20px}.card-icon{display:grid;width:44px;height:44px;place-items:center;border-radius:14px}.diet-card .card-icon{background:#f6ead8;color:#95652f}.exercise-card .card-icon{background:#e2f0e7;color:#32704d}.sleep-card .card-icon{background:#ece8f3;color:#6d648b}.observation-card .card-icon{background:#edf1e9;color:#5d755f}.card-heading h2{margin:3px 0 0;color:#2b4034;font-size:22px}.field-group{display:grid;gap:9px;margin-top:17px;padding-top:17px;border-top:1px solid #edf0ed}.field-group:first-of-type{margin-top:0;padding-top:0;border-top:0}.field-group>label,.block-field>span,.two-column-fields label>span{color:#53665b;font-size:12px;font-weight:680}.field-group.compact{margin-top:15px;padding-top:15px}.two-column-fields{display:grid;grid-template-columns:minmax(0,1fr) 170px;gap:12px}.two-column-fields label,.block-field{display:grid;gap:8px}.block-field{margin-top:14px}.sticky-actions{position:sticky;bottom:14px;z-index:5;padding:14px 16px;border:1px solid rgba(181,193,183,.75);border-radius:18px;background:rgba(255,254,250,.94);box-shadow:0 18px 44px rgba(40,62,50,.14);backdrop-filter:blur(14px)}.sticky-actions>div{display:grid;gap:3px;margin-right:auto}.sticky-actions strong{color:#304a3a;font-size:13px}.sticky-actions span{color:#7d8981;font-size:11px}.empty-panel{display:grid;justify-items:center;gap:14px;padding:54px 24px;text-align:center}.empty-panel svg{color:#3f7058}.empty-panel h2{margin:0;color:#2d4135}.empty-panel p{max-width:520px;margin:0;color:#738078;line-height:1.7}@media(max-width:960px){.draft-head{align-items:flex-start;flex-direction:column}.editor-grid{grid-template-columns:1fr}.day-tabs{grid-template-columns:repeat(4,minmax(0,1fr))}}@media(max-width:640px){.head-actions{width:100%;display:grid;grid-template-columns:1fr 1fr}.day-tabs{grid-template-columns:repeat(2,minmax(0,1fr))}.two-column-fields{grid-template-columns:1fr}.sticky-actions{align-items:stretch;flex-direction:column}.sticky-actions>div{margin-right:0}.sticky-actions button{width:100%}.draft-page{padding-bottom:150px}}
 </style>

@@ -285,6 +285,14 @@ export interface HealthPlanDraftUpdateRequest {
   days: HealthPlanDay[];
 }
 
+export interface HealthPlanReviewResult {
+  status: "REASONABLE" | "NEEDS_IMPROVEMENT" | "FAILED";
+  summary?: string;
+  issues?: string[];
+  suggestions?: string[];
+  recommendedAction?: "ACTIVATE" | "GENERATE_DETAILED";
+}
+
 export interface HealthPlan {
   planId: number;
   userId?: number;

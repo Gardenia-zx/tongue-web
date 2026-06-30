@@ -69,6 +69,13 @@
             :task="message.task"
           />
 
+          <AssistantResponse
+            v-else-if="message.role === 'assistant' && message.structuredContent"
+            :content="message.content"
+            :status="message.status"
+            :structured-content="message.structuredContent"
+          />
+
           <p v-else>
             {{ message.display ?? message.content }}<i v-if="message.typing" class="cursor"></i>
           </p>
@@ -81,6 +88,16 @@
             @click="router.push(`/reports/${message.reportId}`)"
           >
             查看完整报告
+          </el-button>
+          <el-button
+            v-if="message.status === 'COMPLETED' && message.reportId"
+            class="report-btn"
+            type="success"
+            plain
+            :loading="planCreatingReportId === message.reportId"
+            @click="createHealthPlanDraft(message.reportId)"
+          >
+            生成我的7天健康计划
           </el-button>
         </div>
       </article>
@@ -126,9 +143,12 @@ import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import { Bot, ImagePlus, Send, User, X } from 'lucide-vue-next';
 import {
+  AssistantResponse,
   agentChatV2Api,
+  healthPlanApi,
   tongueApi,
   USER_KEY,
+  type AgentReportRef,
   type AgentMessageStatus,
   type BowelStatus,
   type CurrentState,
@@ -140,6 +160,12 @@ import {
   type UserStateSnapshot,
 } from '@tongue/shared';
 import AnalysisProgressCard from '../components/analysis/AnalysisProgressCard.vue';
+import {
+  normalizeAssistantMessage,
+  resolveContextBinding,
+  sanitizeStructuredContent,
+  type StructuredAnswer,
+} from '../utils/assistant-response';
 
 type Phase =
   | 'UPLOADING'
@@ -165,6 +191,8 @@ interface ChatMessage {
   thinking?: boolean;
   stageText?: string;
   reportId?: number;
+  reportRef?: AgentReportRef;
+  structuredContent?: StructuredAnswer;
   stateForm?: StateForm;
   stateStep?: number;
   stateSubmitting?: boolean;
@@ -210,12 +238,14 @@ const previewUrl = ref('');
 const fileInput = ref<HTMLInputElement | null>(null);
 const listRef = ref<HTMLElement | null>(null);
 const running = ref(false);
+const planCreatingReportId = ref<number | null>(null);
 const messages = ref<ChatMessage[]>([]);
 const threadId = ref(`web_${createId()}`);
 const conversationId = ref(`conv_${createId()}`);
 const timers = new Map<string, number>();
 const polls = new Set<number>();
 let sessionSaveTimer: number | undefined;
+let destroyed = false;
 
 const stateQuestions: StateQuestion[] = [
   {
@@ -298,6 +328,14 @@ function currentUserId() {
 
 function storageKey() {
   return `${CHAT_SESSION_PREFIX}_${currentUserId()}`;
+}
+
+function latestKnownReportId() {
+  for (let index = messages.value.length - 1; index >= 0; index -= 1) {
+    const reportId = messages.value[index]?.reportRef?.reportId || messages.value[index]?.reportId;
+    if (reportId) return reportId;
+  }
+  return undefined;
 }
 
 async function scrollToBottom() {
@@ -557,6 +595,8 @@ function normalizeStoredMessage(value: unknown): ChatMessage | null {
     imageAttached: raw.imageAttached === true || Boolean(rawImageUrl),
     task,
     reportId,
+    reportRef: reportId ? { reportId, relation: 'GENERATED' } : undefined,
+    structuredContent: sanitizeStructuredContent(raw.structuredContent),
     typing: false,
     display: undefined,
     thinking: false,
@@ -738,7 +778,7 @@ async function sendText(content: string, requestId: string) {
       threadId: threadId.value,
       conversationId: conversationId.value,
       message: { role: 'user', contentType: 'text', content },
-      contextBinding: { mode: 'AUTO' },
+      contextBinding: resolveContextBinding(content, latestKnownReportId()),
       clientContext: { page: 'analysis', locale: 'zh-CN' },
     });
 
@@ -753,14 +793,19 @@ async function sendText(content: string, requestId: string) {
       return;
     }
 
-    target.reportId = response.assistantMessage.reportRef?.reportId;
-    typeMessage(
-      messageId,
-      response.assistantMessage.content || '我暂时没有生成有效回复。',
-      () => {
+    const normalized = normalizeAssistantMessage(response.assistantMessage);
+    target.content = normalized.content || '我暂时没有生成有效回复。';
+    target.structuredContent = normalized.structuredContent;
+    target.reportRef = normalized.reportRef;
+    target.reportId = normalized.reportRef?.reportId;
+    if (target.structuredContent) {
+      target.status = 'COMPLETED';
+      saveSession(true);
+    } else {
+      typeMessage(messageId, target.content, () => {
         target.status = 'COMPLETED';
-      },
-    );
+      });
+    }
   } catch (error) {
     stopTimer(messageId);
     target.thinking = false;
@@ -829,8 +874,10 @@ async function pollTask(taskId: number, target: ChatMessage) {
 
   try {
     for (let attempt = 0; attempt < MAX_POLL_ATTEMPTS; attempt += 1) {
+      if (destroyed) return;
       if (attempt > 0) {
         await new Promise((resolve) => window.setTimeout(resolve, POLL_INTERVAL_MS));
+        if (destroyed) return;
       }
 
       const task = await tongueApi.task(taskId);
@@ -871,7 +918,24 @@ async function pollTask(taskId: number, target: ChatMessage) {
   }
 }
 
+async function createHealthPlanDraft(reportId: number) {
+  if (planCreatingReportId.value) return;
+  saveSession(true);
+  planCreatingReportId.value = reportId;
+  try {
+    const plan = await healthPlanApi.draftFromReport(reportId);
+    saveSession(true);
+    ElMessage.success('7 天计划草稿已生成，可以开始自定义');
+    await router.push(`/health-plan/draft/${plan.planId}`);
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '生成计划草稿失败');
+  } finally {
+    planCreatingReportId.value = null;
+  }
+}
+
 onMounted(async () => {
+  destroyed = false;
   restoreSession();
 
   const activeMessages = messages.value.filter((message) => isTaskRunning(message.task));
@@ -887,6 +951,7 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(() => {
+  destroyed = true;
   for (const message of messages.value) {
     if (message.typing) {
       stopTimer(message.id);
@@ -897,7 +962,7 @@ onBeforeUnmount(() => {
     if (message.thinking && !message.task) {
       stopTimer(message.id);
       message.thinking = false;
-      if (!message.content) {
+      if (!message.content && !message.reportId) {
         message.status = 'FAILED';
         message.content = '上一次请求在页面切换时中断，请重新发送。';
       }

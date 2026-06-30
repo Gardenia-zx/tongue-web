@@ -394,9 +394,9 @@ async function createReview() {
 async function createHealthPlan() {
   planCreating.value = true;
   try {
-    await healthPlanApi.fromReport(reportId);
-    ElMessage.success("健康计划已生成");
-    await router.push("/health-plan");
+    const plan = await healthPlanApi.draftFromReport(reportId);
+    ElMessage.success("7 天计划草稿已生成，可以开始自定义");
+    await router.push(`/health-plan/draft/${plan.planId}`);
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : "生成健康计划失败");
   } finally {

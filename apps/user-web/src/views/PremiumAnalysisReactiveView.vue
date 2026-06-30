@@ -7,7 +7,7 @@
       </div>
       <AnalysisChatView />
     </section>
-    <PremiumAnalysisView class="legacy-dashboard" />
+    <PremiumAnalysisView class="legacy-dashboard" :show-assistant="false" />
   </div>
 </template>
 

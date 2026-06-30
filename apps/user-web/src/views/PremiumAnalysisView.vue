@@ -98,7 +98,7 @@
       </div>
     </div>
 
-    <section ref="assistantSectionRef" class="assistant-shell">
+    <section v-if="showAssistant" ref="assistantSectionRef" class="assistant-shell">
       <div class="assistant-heading">
         <div>
           <span class="card-kicker">健康助手</span>
@@ -120,6 +120,7 @@ import AnalysisV2View from "./AnalysisV2View.vue";
 
 const auth = useAuthStore();
 const router = useRouter();
+withDefaults(defineProps<{ showAssistant?: boolean }>(), { showAssistant: true });
 const dashboard = ref<DashboardData | null>(null);
 const currentPlan = ref<HealthPlan | null>(null);
 const assistantSectionRef = ref<HTMLElement | null>(null);

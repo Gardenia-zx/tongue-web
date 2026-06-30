@@ -190,6 +190,12 @@ import {
   type TaskStatus,
   type UserMe,
 } from "@tongue/shared";
+import {
+  formatStructuredItem as formatAssistantStructuredItem,
+  normalizeAssistantMessage,
+  resolveContextBinding,
+  sanitizeStructuredContent as sanitizeAssistantStructuredContent,
+} from "../utils/assistant-response";
 
 type ChatRole = "assistant" | "user";
 type ProcessPhase = "UPLOADING" | "PENDING" | "MODEL_ANALYZING" | "RESULT_ANALYZING" | "RAG_RETRIEVING" | "REPORT_GENERATING";
@@ -416,7 +422,6 @@ function typeAssistantMessage(message: ChatMessage, finalText: string, done?: ()
   message.content = finalText;
   message.processPhase = undefined;
   message.task = undefined;
-  message.structuredContent = undefined;
 
   if (prefersReducedMotion() || finalText.length < 2) {
     message.displayContent = undefined;
@@ -462,37 +467,7 @@ function clearTransientTimers() {
 }
 
 function sanitizeStructuredContent(value: unknown): StructuredAnswer | undefined {
-  if (!value || typeof value !== "object") return undefined;
-  const raw = value as Record<string, unknown>;
-  const sections = Array.isArray(raw.sections)
-    ? raw.sections
-        .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object")
-        .map((item) => ({
-          sectionKey: typeof item.section_key === "string"
-            ? item.section_key
-            : typeof item.sectionKey === "string"
-              ? item.sectionKey
-              : undefined,
-          title: typeof item.title === "string" ? item.title : undefined,
-          content: typeof item.content === "string" ? item.content : undefined,
-          items: Array.isArray(item.items) ? item.items : undefined,
-          metadata: item.metadata && typeof item.metadata === "object"
-            ? item.metadata as Record<string, unknown>
-            : undefined,
-        }))
-    : undefined;
-  return {
-    answerType: typeof raw.answer_type === "string"
-      ? raw.answer_type
-      : typeof raw.answerType === "string"
-        ? raw.answerType
-        : undefined,
-    title: typeof raw.title === "string" ? raw.title : undefined,
-    summary: typeof raw.summary === "string" ? raw.summary : undefined,
-    highlights: Array.isArray(raw.highlights) ? raw.highlights : undefined,
-    sections,
-    disclaimer: typeof raw.disclaimer === "string" ? raw.disclaimer : undefined,
-  };
+  return sanitizeAssistantStructuredContent(value) as StructuredAnswer | undefined;
 }
 
 function sanitizeMessage(value: unknown): ChatMessage | null {
@@ -562,7 +537,6 @@ function restoreChatSession() {
 }
 
 function saveChatSession() {
-  if (messages.value.some((message) => message.typing)) return;
   const session: StoredChatSessionV2 = {
     schemaVersion: 2,
     userId: currentUserId(),
@@ -597,22 +571,7 @@ function rememberLatestReport(report: ReportDetail) {
 }
 
 function contextBindingFor(content: string): AgentContextBinding {
-  const compact = content.replace(/\s+/g, "");
-  if (/(不要结合报告|不参考报告|不用报告|这是新问题|单独问一下)/.test(compact)) {
-    return { mode: "NONE" };
-  }
-
-  const reportId = latestKnownReportId();
-  const explicitlyMentionsReport = /(报告|舌象结果|分析结果|识别结果|上一份舌象|刚才的舌象)/.test(compact);
-  const detailedReportRequest = /((详细|完整|展开|太简单|不够详细).*?(报告|分析))|((报告|分析).*?(详细|完整|展开|太简单|不够详细))/.test(compact);
-  const dietOrCareRequest = /(饮食|吃什么|怎么吃|每天吃|食谱|忌口|食物|早餐|午餐|晚餐|调理|规划)/.test(compact);
-  if ((explicitlyMentionsReport || detailedReportRequest || dietOrCareRequest) && reportId) {
-    return { mode: "ACTIVE_REPORT", reportId };
-  }
-  if (/^(继续|再详细|详细一点|展开说说|刚才|上面|这个|那这个)/.test(compact)) {
-    return { mode: "LAST_ANSWER" };
-  }
-  return { mode: "AUTO" };
+  return resolveContextBinding(content, latestKnownReportId());
 }
 
 function isDailyPlanRequest(content: string) {
@@ -621,19 +580,7 @@ function isDailyPlanRequest(content: string) {
 }
 
 function formatStructuredItem(value: unknown) {
-  if (typeof value === "string" || typeof value === "number") return String(value);
-  if (value && typeof value === "object") {
-    const item = value as Record<string, unknown>;
-    for (const key of ["content", "text", "summary", "label", "title"]) {
-      if (typeof item[key] === "string") return item[key] as string;
-    }
-    try {
-      return JSON.stringify(value);
-    } catch {
-      return String(value);
-    }
-  }
-  return String(value ?? "");
+  return formatAssistantStructuredItem(value);
 }
 
 function openFilePicker() {
@@ -745,9 +692,10 @@ async function sendTextChat(content: string, requestId: string, userMessageId: s
     stopThinking(placeholderId);
     chatThreadId.value = response.threadId || chatThreadId.value;
     conversationId.value = response.conversationId || conversationId.value;
-    const finalContent = response.assistantMessage.content || "我暂时没有生成有效回复。";
-    const structuredContent = sanitizeStructuredContent(response.assistantMessage.structuredContent);
-    const reportRef = response.assistantMessage.reportRef;
+    const normalized = normalizeAssistantMessage(response.assistantMessage);
+    const finalContent = normalized.content || "我暂时没有生成有效回复。";
+    const structuredContent = normalized.structuredContent as StructuredAnswer | undefined;
+    const reportRef = normalized.reportRef;
     target.turnId = response.turnId;
     target.serverMessageId = response.assistantMessage.messageId;
     target.id = response.assistantMessage.messageId || target.id;
@@ -758,6 +706,17 @@ async function sendTextChat(content: string, requestId: string, userMessageId: s
       target.structuredContent = structuredContent;
       target.reportRef = reportRef;
       target.status = "FAILED";
+      return;
+    }
+
+    target.content = finalContent;
+    target.structuredContent = structuredContent;
+    target.reportRef = reportRef;
+    if (structuredContent) {
+      target.status = "COMPLETED";
+      if (target.reportRef?.reportId) latestReport.value = { reportId: target.reportRef.reportId };
+      saveChatSession();
+      await scrollToBottom();
       return;
     }
 
